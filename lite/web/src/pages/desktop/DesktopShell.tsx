@@ -91,22 +91,36 @@ export default function DesktopShell() {
     </div>
   )
 
+  const brand = (
+    <div className="desktop-logo" data-tauri-drag-region>
+      <img src={logo} alt="" data-tauri-drag-region />
+      <span data-tauri-drag-region>Banbu Connect Lite</span>
+    </div>
+  )
+
   return (
     <div className="desktop-shell">
-      {/* macOS 的红绿灯在左，按钮放右上角；Windows 的窗口按钮在右，按钮放左上角。
+      {/* macOS 的红绿灯在左，居中放应用名，按钮放右上角；Windows 的窗口按钮在右，应用名放左边，
+          按钮和窗口按钮一起放右边（居中会被窗口按钮挡住）。
           data-tauri-drag-region 只对直接点中的元素生效，空白处和 logo 都要标上。 */}
       <header className="desktop-titlebar desktop-titlebar-centered" data-platform={platform} data-tauri-drag-region>
-        <div className="titlebar-side titlebar-left" data-tauri-drag-region>
-          {platform !== 'mac' && corner}
-        </div>
-        <div className="desktop-logo" data-tauri-drag-region>
-          <img src={logo} alt="" data-tauri-drag-region />
-          <span data-tauri-drag-region>Banbu Connect Lite</span>
-        </div>
-        <div className="titlebar-side titlebar-right" data-tauri-drag-region>
-          {platform === 'mac' && corner}
-          {platform === 'win' && <WindowControls />}
-        </div>
+        {platform === 'win' ? (
+          <>
+            {brand}
+            <div className="titlebar-side titlebar-right" data-tauri-drag-region>
+              {corner}
+              <WindowControls />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="titlebar-side titlebar-left" data-tauri-drag-region />
+            {brand}
+            <div className="titlebar-side titlebar-right" data-tauri-drag-region>
+              {platform === 'mac' && corner}
+            </div>
+          </>
+        )}
       </header>
       <main className="desktop-content" key={refresh}>
         <Routes>

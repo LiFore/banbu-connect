@@ -92,3 +92,14 @@ export function WindowControls() {
     </div>
   )
 }
+
+/** 现在还在运行的 AI 应用名（Claude Code、Claude Desktop、Codex、ChatGPT、Antigravity）。没有外壳或查询失败时返回 undefined。 */
+export async function runningApps(): Promise<string[] | undefined> {
+  const invoke = window.__TAURI__?.core?.invoke
+  if (!invoke) return undefined
+  try {
+    return (await invoke('shell_running_apps')) as string[]
+  } catch {
+    return undefined
+  }
+}

@@ -3,6 +3,7 @@ import { Card, Empty, Tag } from 'antd'
 import { HistoryOutlined } from '@ant-design/icons'
 import { api, type DesktopEvent } from '../../api'
 import ServerBinding from './ServerBinding'
+import EgressCard from './EgressCard'
 import { OTelFooter } from './ClaudeUsage'
 import { AppUpdateBanner, AppVersionLine, useAppUpdate } from './AppUpdate'
 
@@ -13,6 +14,7 @@ export default function Settings() {
     <div className="desktop-stack">
       <AppUpdateBanner update={update} />
       <ServerBinding />
+      <EgressCard />
       <EventsCard />
       <AppVersionLine update={update} />
       <OTelFooter />

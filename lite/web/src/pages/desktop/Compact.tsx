@@ -7,6 +7,7 @@ import logo from '../../assets/logo.png'
 import { WindowControls, inShell, openFullWindow, quitApp, useWindowPlatform } from './windowChrome'
 import ForceUpdateGate from './ForceUpdate'
 import Accounts from './Accounts'
+import { StartupEgressCheck } from './EgressGuard'
 
 // 精简主界面：主窗口默认显示它（外壳打开 /compact），和完整界面是两个页面。
 // 上面是账号（和完整界面首页同一套卡片，一排横向滚动），底部是「完整界面」和「退出」。
@@ -77,17 +78,31 @@ export default function Compact() {
     return () => window.removeEventListener('banbu-quit', askQuit)
   }, [askQuit])
 
+  // Windows 右上角是窗口按钮，应用名放左边；macOS 红绿灯在左，应用名居中。
+  const brand = (
+    <div className="desktop-logo" data-tauri-drag-region>
+      <img src={logo} alt="" data-tauri-drag-region />
+      <span data-tauri-drag-region>Banbu Connect Lite</span>
+    </div>
+  )
+
   return (
     <div className="desktop-shell compact-shell">
       <header className="desktop-titlebar desktop-titlebar-centered" data-platform={platform} data-tauri-drag-region>
-        <div className="titlebar-side" data-tauri-drag-region />
-        <div className="desktop-logo" data-tauri-drag-region>
-          <img src={logo} alt="" data-tauri-drag-region />
-          <span data-tauri-drag-region>Banbu Connect Lite</span>
-        </div>
-        <div className="titlebar-side titlebar-right" data-tauri-drag-region>
-          {platform === 'win' && <WindowControls />}
-        </div>
+        {platform === 'win' ? (
+          <>
+            {brand}
+            <div className="titlebar-side titlebar-right" data-tauri-drag-region>
+              <WindowControls />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="titlebar-side" data-tauri-drag-region />
+            {brand}
+            <div className="titlebar-side titlebar-right" data-tauri-drag-region />
+          </>
+        )}
       </header>
 
       <main className="compact-body">
@@ -120,6 +135,7 @@ export default function Compact() {
         )}
       </footer>
       <ForceUpdateGate />
+      <StartupEgressCheck />
     </div>
   )
 }

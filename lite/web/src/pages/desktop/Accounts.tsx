@@ -18,6 +18,7 @@ import {
   SwapOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
+import { useEgressGuard } from './EgressGuard'
 import {
   api,
   type AccountsView,
@@ -122,7 +123,19 @@ export default function Accounts({ embedded = false, compact = false }: { embedd
     message.error((e as Error).message)
   }
 
+  const guard = useEgressGuard()
+
   const act = async (key: string, f: () => Promise<unknown>, done?: string) => {
+    // 登录、启动、切换账号前先做出口检测；换登录（不含启动）时再看对应应用是否在运行。异常时要确认两次才能强制上号。
+    const m = /^(login|app_login|desktop_login|launch|switch):([^:]+):/.exec(key)
+    if (m) {
+      setBusy(key)
+      const ok = await guard(m[2], m[1] !== 'launch' || m[2] === 'gemini')
+      if (!ok) {
+        setBusy(undefined)
+        return
+      }
+    }
     setBusy(key)
     try {
       await f()

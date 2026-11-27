@@ -125,8 +125,21 @@ html[data-shell='mac'] .desktop-titlebar-centered {
   padding-left: 16px;
 }
 
+/* Windows：应用名在左，右边是按钮和窗口按钮，不居中（居中会被右上角窗口按钮挡住） */
 .desktop-titlebar-centered[data-platform='win'] {
-  padding-left: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-left: 12px;
+}
+
+.desktop-titlebar-centered[data-platform='win'] .desktop-logo {
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.desktop-logo span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .desktop-titlebar-centered .desktop-logo {

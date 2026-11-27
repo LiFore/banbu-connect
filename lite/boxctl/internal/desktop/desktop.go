@@ -168,6 +168,7 @@ func Run(ctx context.Context, opts Options) error {
 	claudeRoutes(mux, authed, distClient, ws.Check)
 	workspaceRoutes(mux, authed, ws, distClient)
 	fileRoutes(mux, authed, distClient, downloads)
+	egressRoutes(mux, authed, opts.DataDir)
 	geminiRoutes(mux, authed, distClient)
 	telemetry.Routes(mux, authed, writeJSON)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {

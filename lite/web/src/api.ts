@@ -420,12 +420,40 @@ export interface FileDownload {
   updated_at: string
 }
 
+// ---- 出口检测，与 internal/desktop/egress.go 对应 ----
+
+export interface EgressResult {
+  site: string
+  ok: boolean
+  ip?: string
+  country?: string
+  colo?: string
+  error?: string
+  latency_ms: number
+}
+
+export interface EgressReport {
+  results: EgressResult[]
+  allowed_countries: string[]
+  problems: string[]
+  abnormal: boolean
+  checked_at: string
+}
+
 export const api = {
   session: () => request<SessionInfo>('/auth/session'),
 
   desktop: {
     status: () => request<DesktopSummary>('/desktop/status'),
     events: () => request<DesktopEvent[]>('/desktop/events'),
+  },
+
+  egress: {
+    /** kind：claude、codex、gemini 或空；除 Cloudflare 外再检测账号所属服务。 */
+    check: (kind = '') => request<EgressReport>(`/desktop/egress/check?kind=${encodeURIComponent(kind)}`, { method: 'POST' }),
+    settings: () => request<{ allowed_countries: string[] }>('/desktop/egress/settings'),
+    saveSettings: (allowed_countries: string[]) =>
+      request<{ allowed_countries: string[] }>('/desktop/egress/settings', { method: 'PUT', body: JSON.stringify({ allowed_countries }) }),
   },
 
   server: {
