@@ -70,6 +70,14 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: ./scripts/build-app.sh ${{ steps.ver.outputs.version }}
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: banbu-connect-lite-windows
+          if-no-files-found: error
+          path: |
+            lite/client/app/src-tauri/target/release/bundle/nsis/*-setup.exe
+            lite/client/app/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+
       # 上传到管理服务（只上传、不发布，到管理页面「客户端更新」里发布）。
       # Secrets：BANBU_SERVER_URL、BANBU_ADMIN_PASSWORD；自签名证书时再配 BANBU_SERVER_FINGERPRINT；
       # BANBU_RELEASE_NOTES 可选。需要签名私钥（否则没有 .sig，不能上传）。
@@ -82,11 +90,3 @@ jobs:
           BANBU_SERVER_FINGERPRINT: ${{ secrets.BANBU_SERVER_FINGERPRINT }}
           BANBU_RELEASE_NOTES: ${{ secrets.BANBU_RELEASE_NOTES }}
         run: ./scripts/upload-release.sh
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: banbu-connect-lite-windows
-          if-no-files-found: error
-          path: |
-            lite/client/app/src-tauri/target/release/bundle/nsis/*-setup.exe
-            lite/client/app/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
