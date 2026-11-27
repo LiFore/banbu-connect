@@ -563,7 +563,8 @@ fn shell_open_full(app: AppHandle, path: Option<String>) {
         .filter(|p| p.starts_with('/') && !p.starts_with("//") && p.len() <= 200 && p.chars().all(|c| c.is_ascii_alphanumeric() || "/-_.".contains(c)))
         .unwrap_or_else(|| "/".to_string());
     let handle = app.clone();
-    let _ = app.run_on_main_thread(move || open_full(&handle, &path));
+    // 不能在主线程上建窗口：Windows 上 build 在主线程里调用会死锁（白屏、整个应用卡死），放到单独线程。
+    std::thread::spawn(move || open_full(&handle, &path));
 }
 
 /// 完整界面左上角（Windows）/ 右上角（macOS）的「精简界面」按钮：回到主窗口的精简页，关掉完整界面窗口。
