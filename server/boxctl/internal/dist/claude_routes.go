@@ -157,6 +157,15 @@ func (s *Server) claudeAdminRoutes(mux *http.ServeMux, authed func(http.HandlerF
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
+	// 一键清除所有 AI 账号上的错误记录（登录失败、续期失败、鉴权测试失败）。
+	mux.Handle("POST /api/v1/dist/ai-accounts/clear-errors", authed(func(w http.ResponseWriter, r *http.Request) {
+		res, err := s.ClearAIErrors(r.Context())
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, res)
+	}))
 	// 测试收信（IMAP 登录或 Gmail 授权）：失败是测试结果，不是服务端故障。
 	mux.Handle("POST /api/v1/dist/claude-accounts/{id}/test", authed(func(w http.ResponseWriter, r *http.Request) {
 		id, ok := pathID(w, r)

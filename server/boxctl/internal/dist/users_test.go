@@ -89,3 +89,40 @@ func TestUsersAssignment(t *testing.T) {
 		t.Fatalf("gemini after delete = %+v", g)
 	}
 }
+
+func TestClearAIErrors(t *testing.T) {
+	ctx := context.Background()
+	s := newServer(t)
+	a, err := s.CreateClaudeAccount(ctx, ClaudeAccountInput{Email: "e@gmail.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.CreateClaudeAccount(ctx, ClaudeAccountInput{Email: "ok@gmail.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`UPDATE claude_accounts SET last_error = '登录失败', refresh_error = '续期失败' WHERE id = ?`, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	s.authTests = map[string]*AuthTest{
+		authTestKey(KindClaude, a.ID): {Kind: KindClaude, AccountID: a.ID, Status: TestFailed},
+		authTestKey(KindClaude, b.ID): {Kind: KindClaude, AccountID: b.ID, Status: TestOK},
+	}
+	res, err := s.ClearAIErrors(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Login != 1 || res.Refresh != 1 || res.Auth != 1 || res.Total != 1 {
+		t.Fatalf("res = %+v", res)
+	}
+	got, _ := s.claudeAccount(ctx, a.ID)
+	if got.LastError != "" || got.RefreshError != "" || s.authTest(KindClaude, a.ID) != nil {
+		t.Fatalf("错误没清掉：%+v", got)
+	}
+	if s.authTest(KindClaude, b.ID) == nil {
+		t.Fatal("成功的测试结果不该清掉")
+	}
+	if res, _ = s.ClearAIErrors(ctx); res.Total != 0 {
+		t.Fatalf("没有错误时应该是 0：%+v", res)
+	}
+}

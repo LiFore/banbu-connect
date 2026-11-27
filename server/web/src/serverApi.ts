@@ -859,6 +859,8 @@ export const serverApi = {
   updateSettings: (s: Partial<DistSettings>) => request<{ ok: boolean }>('/dist/settings', { method: 'PUT', body: JSON.stringify(s) }),
   devices: () => request<Device[]>('/dist/devices'),
   users: () => request<User[]>('/dist/users'),
+  clearAIErrors: () =>
+    request<{ login: number; refresh: number; auth: number; total: number }>('/dist/ai-accounts/clear-errors', { method: 'POST' }),
   createUser: (u: UserInput) => request<User>('/dist/users', { method: 'POST', body: JSON.stringify(u) }),
   updateUser: (id: number, u: UserInput) => request<User>(`/dist/users/${id}`, { method: 'PUT', body: JSON.stringify(u) }),
   deleteUser: (id: number) => request<{ ok: boolean }>(`/dist/users/${id}`, { method: 'DELETE' }),

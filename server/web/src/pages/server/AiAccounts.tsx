@@ -5,6 +5,7 @@ import {
   CheckCircleFilled,
   ClockCircleOutlined,
   CloseCircleFilled,
+  ClearOutlined,
   CloudServerOutlined,
   DeleteOutlined,
   DesktopOutlined,
@@ -352,6 +353,28 @@ export default function AiAccounts() {
   const needGmail = items.some((it) => it.kind !== 'gemini' && isGmail(it.a.email) && !it.a.has_mailbox)
   const needMail = items.some((it) => it.kind !== 'gemini' && it.a.has_mailbox)
   const deviceName = (id: number) => devices.find((d) => d.id === id)?.name ?? `#${id}`
+  // 账号上显示的错误：登录失败、续期失败、鉴权失败（「没有令牌」「没分配客户端」这类状态不算，清不掉也不该清）。
+  const errorCount = items.filter((it) => {
+    const a = it.a
+    return (
+      a.auth_test?.status === 'failed' ||
+      (it.kind !== 'gemini' && (it.a.refresh?.phase === 'failed' || !!it.a.refresh_error || !!it.a.last_error))
+    )
+  }).length
+  const clearErrors = () =>
+    modal.confirm({
+      title: `清除 ${errorCount} 个账号上的错误？`,
+      content: '清掉登录失败、续期失败和鉴权失败的记录，不动令牌、分配和额度。问题还在的话，下一次登录、续期或测试会重新报出来。',
+      okText: '清除',
+      cancelText: '取消',
+      onOk: () =>
+        serverApi
+          .clearAIErrors()
+          .then((r) => message.success(r.total > 0 ? `已清除 ${r.total} 个账号的错误` : '没有需要清除的错误'))
+          .catch((e: Error) => message.error(e.message))
+          .finally(reload),
+    })
+
   const expiring = items.filter((it) => {
     const left = expiryDays(it.a.sub_expires)
     return left !== undefined && left <= expirySoon
@@ -439,6 +462,11 @@ export default function AiAccounts() {
         count={items.length}
         actions={
           <>
+            <Tooltip title={errorCount === 0 ? '没有错误' : '清掉所有账号上的登录失败、续期失败、鉴权失败记录'}>
+              <Button icon={<ClearOutlined />} disabled={errorCount === 0} onClick={clearErrors}>
+                清除所有错误{errorCount > 0 ? `（${errorCount}）` : ''}
+              </Button>
+            </Tooltip>
             <Dropdown
               trigger={['click']}
               menu={{
