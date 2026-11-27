@@ -1,0 +1,58 @@
+#!/bin/sh /etc/rc.common
+# proxy-guard：先于 dnsmasq(19)、network(20) 启动，开机后尽早装上上一份保护规则（M9-02）。
+# 规则写在 nft 表 inet proxy_guard 里，不依赖内核、panel 存活（ADR-032）。
+
+START=18
+STOP=95
+USE_PROCD=1
+PROG=/usr/bin/boxctl
+
+# lan_devs 输出所有局域网网桥（逗号分隔）：防火墙里不做 NAT 的区域（lan、访客、IoT 等）的网卡。
+# 访客网络也要做 DNS 重定向、加密 DNS 拦截和 hold，否则那里的设备能绕过保护。
+# docker 区域跳过（容器有自己的 DNS）。开机时 network 还没起来，取 uci 里配置的网卡名。
+lan_devs() {
+	local devs="" i=0 zone masq nets n dev
+	while zone="$(uci -q get "firewall.@zone[$i].name")"; do
+		masq="$(uci -q get "firewall.@zone[$i].masq")"
+		i=$((i + 1))
+		[ "$masq" = "1" ] && continue
+		[ "$zone" = "docker" ] && continue
+		nets="$(uci -q get "firewall.@zone[$((i - 1))].network")"
+		for n in $nets; do
+			dev="$(uci -q get "network.$n.device")"
+			[ -n "$dev" ] || dev="$(uci -q get "network.$n.ifname")"
+			[ -n "$dev" ] || continue
+			case ",$devs," in
+			*",$dev,"*) ;;
+			*) devs="${devs:+$devs,}$dev" ;;
+			esac
+		done
+	done
+	echo "$devs"
+}
+
+start_service() {
+	local data_dir lan_dev
+	config_load boxctl
+	config_get data_dir panel data_dir /etc/boxctl
+	# 可在 /etc/config/boxctl 的 panel 段用 lan_devices 手工指定（逗号分隔）
+	config_get lan_dev panel lan_devices ""
+	[ -n "$lan_dev" ] || lan_dev="$(lan_devs)"
+	[ -n "$lan_dev" ] || lan_dev="$(uci -q get network.lan.device)"
+	lan_dev="${lan_dev:-br-lan}"
+
+	procd_open_instance guard
+	procd_set_param command "$PROG" guard \
+		-sock /var/run/boxctl/guard.sock \
+		-data-dir "$data_dir" \
+		-lan-dev "$lan_dev"
+	# threshold timeout retry：崩溃 1 秒后重启，无限重试（M1-02）
+	procd_set_param respawn 3600 1 0
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_close_instance
+}
+
+service_triggers() {
+	procd_add_reload_trigger boxctl network firewall
+}

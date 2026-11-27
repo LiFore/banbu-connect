@@ -1,0 +1,45 @@
+{
+	"luci-app-boxctl": {
+		"description": "Banbu Box 面板入口与运行状态",
+		"read": {
+			"uci": [
+				"boxctl"
+			],
+			"file": {
+				"/usr/bin/boxctl status": [
+					"exec"
+				]
+			},
+			"ubus": {
+				"service": [
+					"list"
+				],
+				"system": [
+					"board",
+					"info"
+				],
+				"file": [
+					"exec"
+				]
+			}
+		},
+		"write": {
+			"file": {
+				"/etc/init.d/boxctl-panel restart": [
+					"exec"
+				],
+				"/etc/init.d/boxctl-guard restart": [
+					"exec"
+				],
+				"/etc/init.d/boxctl-core restart": [
+					"exec"
+				]
+			},
+			"ubus": {
+				"file": [
+					"exec"
+				]
+			}
+		}
+	}
+}

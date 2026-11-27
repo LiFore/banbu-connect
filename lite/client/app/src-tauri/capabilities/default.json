@@ -1,0 +1,23 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "本地页面（启动页、托盘面板）：自定义命令，加上自绘标题栏需要的窗口操作。",
+  "windows": [
+    "main",
+    "tray"
+  ],
+  "local": true,
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "allow-service-url",
+    "allow-backend-error",
+    "allow-restart-backend",
+    "allow-tray-data",
+    "allow-tray-action"
+  ]
+}

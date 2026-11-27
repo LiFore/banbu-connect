@@ -1,0 +1,20 @@
+Banbu Connect Lite 安装说明（macOS）
+
+1. 把安装窗口里的 Banbu Connect Lite 拖到「应用程序」。
+
+2. 第一次打开时如果提示「已损坏，无法打开」：
+   这是因为应用还没有经过苹果公证，下载后带了隔离标记，应用本身是完好的。
+   双击安装窗口里的「修复无法打开」即可。
+
+   如果「修复无法打开」本身被拦（提示无法验证开发者）：
+   打开「系统设置 → 隐私与安全性」，在页面下方点「仍要打开」，再双击一次。
+
+3. 也可以手动处理：打开「终端」（在「应用程序 → 实用工具」里），粘贴下面这一行，按回车：
+
+   xattr -dr com.apple.quarantine "/Applications/Banbu Connect Lite.app"
+
+   如果提示权限不够，在前面加 sudo 再执行一次，按提示输入开机密码（输入时不显示）：
+
+   sudo xattr -dr com.apple.quarantine "/Applications/Banbu Connect Lite.app"
+
+之后就可以正常打开了，以后的版本更新不需要再做这一步。

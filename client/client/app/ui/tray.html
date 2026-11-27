@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banbu Connect</title>
+<!-- 托盘面板：左键点托盘图标弹出（src-tauri/src/tray_panel.rs）。数据经外壳命令 tray_data 取，操作经 tray_action 发，
+     和托盘右键菜单是同一套操作（main.rs 的 on_menu）。尺寸 300×348，与 tray_panel.rs 的 WIDTH、HEIGHT 一致。
+     只放最常用的：状态和代理开关、实时速率、出口和网络、模式、TUN 和保护服务、打开主界面、退出；
+     速率曲线、管理服务等在主窗口的精简界面里。 -->
+<style>
+:root { color-scheme: light dark; --bg: #f5f6f7; --card: #fff; --subtle: #f0f1f3; --text: #1c2024; --muted: #60666d; --line: #e4e6ea;
+  --accent: #15803d; --accent-soft: #f0fdf4; --on-accent: #fff; --warn: #b45309; --warn-soft: #fffbeb; --bad: #c0271f; --bad-soft: #fef2f2; --off: #8a9097;
+  --up: #2563eb; --down: #15803d; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121416; --card: #1b1e21; --subtle: #24282c; --text: #e7e9ec; --muted: #9aa1a8; --line: #2c3035;
+  --accent: #4ade80; --accent-soft: #10291a; --on-accent: #052e16; --warn: #fbbf24; --warn-soft: #2d230e; --bad: #f58a83; --bad-soft: #2f1716; --off: #7a8188;
+  --up: #60a5fa; --down: #4ade80; } }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--bg); color: var(--text); cursor: default; user-select: none;
+  font: 12px/1.5 "Segoe UI", -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; }
+button { font: inherit; color: inherit; cursor: pointer; }
+[hidden] { display: none !important; }
+
+/* 顶栏：名称、版本，右边是更新（有新版本时高亮） */
+header { flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 8px 6px 12px; }
+header img { width: 18px; height: 18px; }
+header .name { flex: none; font-weight: 600; font-size: 13px; white-space: nowrap; }
+header .ver { flex: none; color: var(--muted); }
+header .fill { flex: 1; }
+.chip { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 132px; height: 24px; padding: 0 8px; border: 1px solid transparent; border-radius: 12px;
+  background: transparent; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip:hover { background: var(--subtle); color: var(--text); }
+.chip svg { flex: none; width: 13px; height: 13px; }
+.chip span { overflow: hidden; text-overflow: ellipsis; }
+.chip.ready { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+main { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 0 8px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+
+/* 状态 + 代理开关 */
+.status { display: flex; align-items: center; gap: 10px; padding: 9px 12px; }
+.status .dot-lg { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--off); }
+.status[data-tone="ok"] .dot-lg { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.status[data-tone="warn"] .dot-lg { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
+.status[data-tone="bad"] .dot-lg { background: var(--bad); box-shadow: 0 0 0 4px var(--bad-soft); }
+.status .text { flex: 1; min-width: 0; }
+.status .title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status .desc { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bypass { margin: -2px 12px 8px; padding: 2px 8px; border-radius: 6px; background: var(--bad-soft); color: var(--bad); }
+
+/* 开关 */
+.switch { position: relative; flex: none; width: 36px; height: 20px; padding: 0; border: 0; border-radius: 10px; background: var(--line); transition: background .15s; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(16px); }
+.switch:disabled { opacity: .5; cursor: default; }
+
+/* 流量：一行，上传、下载速率和连接数 */
+.traffic { display: flex; align-items: baseline; gap: 12px; padding: 7px 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.traffic .r { display: inline-flex; align-items: baseline; gap: 4px; min-width: 0; }
+.traffic .r i { align-self: center; width: 7px; height: 7px; border-radius: 2px; }
+.traffic .r b { font-size: 15px; font-weight: 600; }
+.traffic .r small { color: var(--muted); }
+.traffic .conns { flex: 1; min-width: 0; text-align: right; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+
+/* 信息行 */
+.rows { padding: 2px 0; }
+.row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 3px 12px; }
+.row + .row { border-top: 1px solid var(--line); }
+.row .k { flex: none; width: 32px; color: var(--muted); }
+.row .v { flex: 1; min-width: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .v.mono { font-variant-numeric: tabular-nums; }
+.row .grow { flex: 1; }
+
+/* 模式分段 */
+.seg { display: inline-flex; padding: 2px; border-radius: 7px; background: var(--subtle); }
+.seg button { padding: 1px 10px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--card); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.seg button:disabled { cursor: default; opacity: .6; }
+
+/* TUN、保护服务：两个并排的小开关 */
+.toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.toggle { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px 6px 10px; }
+.toggle .t { flex: 1; min-width: 0; line-height: 1.3; }
+.toggle .sub { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 底栏：打开主界面、退出（醒目的红色）、更多 */
+footer { flex: none; display: flex; align-items: center; gap: 6px; padding: 8px; }
+.btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--card); white-space: nowrap; font-weight: 600; }
+.btn:hover { border-color: var(--muted); }
+.btn svg { width: 14px; height: 14px; }
+.btn.quit { border-color: var(--bad); background: var(--bad); color: #fff; }
+.btn.quit:hover { filter: brightness(1.08); }
+.icon-btn { flex: none; display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); }
+.icon-btn:hover { background: var(--subtle); color: var(--text); }
+.icon-btn svg { width: 16px; height: 16px; }
+
+/* 更多 */
+.more { position: absolute; right: 8px; bottom: 44px; width: 200px; padding: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.16); }
+.more button { display: block; width: 100%; padding: 6px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
+.more button:hover { background: var(--subtle); }
+.more hr { margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <img src="logo.png" alt="">
+  <span class="name">Banbu Connect</span>
+  <span class="ver" id="ver"></span>
+  <span class="fill"></span>
+  <button type="button" class="chip" id="update" title="检查更新">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg>
+    <span id="update-text">检查更新</span>
+  </button>
+</header>
+
+<main>
+  <section class="card">
+    <div class="status" id="status" data-tone="off">
+      <span class="dot-lg" aria-hidden="true"></span>
+      <div class="text">
+        <div class="title" id="st-title">正在连接后台服务…</div>
+        <div class="desc" id="st-desc">&nbsp;</div>
+      </div>
+      <button type="button" class="switch" id="proxy" role="switch" aria-checked="false" aria-label="启用代理" title="启用代理" disabled></button>
+    </div>
+    <div class="bypass" id="bypass" hidden>信任 Bypass 已打开：账号操作不检查保护状态</div>
+  </section>
+
+  <section class="card traffic" id="traffic" aria-label="流量">
+    <span class="r" title="上传"><i style="background:var(--up)"></i><b id="up">–</b></span>
+    <span class="r" title="下载"><i style="background:var(--down)"></i><b id="down">–</b></span>
+    <span class="conns" id="conns">连接 –</span>
+  </section>
+
+  <section class="card rows">
+    <div class="row"><span class="k">出口</span><span class="v mono" id="egress">–</span></div>
+    <div class="row"><span class="k">网络</span><span class="v" id="network">–</span></div>
+    <div class="row">
+      <span class="k">模式</span><span class="grow"></span>
+      <span class="seg" role="group" aria-label="代理模式">
+        <button type="button" data-mode="rule" aria-pressed="false" disabled>规则</button>
+        <button type="button" data-mode="global" aria-pressed="false" disabled>全局</button>
+        <button type="button" data-mode="direct" aria-pressed="false" disabled>直连</button>
+      </span>
+    </div>
+  </section>
+
+  <section class="toggles">
+    <div class="card toggle">
+      <span class="t">TUN<div class="sub" id="tun-sub">接管全部流量</div></span>
+      <button type="button" class="switch" id="tun" role="switch" aria-checked="false" aria-label="接管全部流量（TUN）" disabled></button>
+    </div>
+    <div class="card toggle">
+      <span class="t">保护服务<div class="sub" id="ks-sub">未启用</div></span>
+      <button type="button" class="switch" id="killswitch" role="switch" aria-checked="false" aria-label="保护服务" disabled></button>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <button type="button" class="btn" id="open">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 6h12"/></svg>
+    打开主界面
+  </button>
+  <button type="button" class="btn quit" id="quit" title="停止代理并退出：先在主窗口确认（后台服务保留，下次打开应用时恢复）">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 2v6"/><path d="M4.6 4.2a5 5 0 1 0 6.8 0"/></svg>
+    <span id="quit-text">退出</span>
+  </button>
+  <button type="button" class="icon-btn" id="more-btn" title="更多" aria-label="更多" aria-haspopup="menu" aria-expanded="false">
+    <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></svg>
+  </button>
+</footer>
+
+<div class="more" id="more" role="menu" hidden>
+  <button type="button" role="menuitem" data-act="log">查看日志</button>
+  <button type="button" role="menuitem" data-act="reinstall">重新安装后台服务</button>
+  <hr>
+  <button type="button" role="menuitem" data-act="quit">只退出托盘（代理继续运行）</button>
+</div>
+
+<script>
+const invoke = window.__TAURI__ && window.__TAURI__.core ? window.__TAURI__.core.invoke : null;
+const $ = (id) => document.getElementById(id);
+
+// 保护服务状态，与 web/src/pages/desktop/Home.tsx 的 ksStates 一致。
+const KS = {
+  off: ['未启用', 'off', '代理故障或离开受信网络时，受保护的服务可能直连'],
+  protecting: ['保护中', 'ok', '受保护的服务经本机内核'],
+  proxy_only: ['保护中，TUN 未接管', 'warn', '只有走系统代理的应用能访问受保护的服务'],
+  blocking: ['已断开受保护的服务', 'warn', '必须经本机内核，但内核不可用'],
+  direct: ['受信网络，直连放行', 'ok', '代理由路由盒负责'],
+  held: ['已阻断', 'warn', '出口还没确认或不符合要求'],
+  error: ['保护可能不完整', 'bad', '系统规则没有和配置保持一致'],
+};
+
+let data = null, timer = null, busy = false;
+
+function bytes(n) {
+  if (!n || n < 0) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i === 0 ? n.toFixed(0) : n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0)) + ' ' + u[i];
+}
+function rateHTML(n) {
+  const [v, unit] = bytes(n).split(' ');
+  return `${v}<small> ${unit}/s</small>`;
+}
+function flag(cc) {
+  if (!cc || cc.length !== 2) return '';
+  return String.fromCodePoint(...[...cc.toUpperCase()].map((c) => 0x1f1a5 + c.charCodeAt(0)));
+}
+function setSwitch(el, on, enabled) {
+  el.setAttribute('aria-checked', on ? 'true' : 'false');
+  el.disabled = !enabled;
+}
+function render(d) {
+  data = d;
+  $('ver').textContent = d.app_version ? 'v' + d.app_version : '';
+  const s = d.status;
+  const connected = !!s;
+
+  // 状态：保护服务状态为主，代理状态为辅。
+  let tone = 'off', title = '后台服务未连接', desc = '打开主界面查看';
+  if (s) {
+    const core = s.core || {};
+    const ks = KS[(s.killswitch || {}).state] || KS.off;
+    const coreText = core.last_error ? '配置有错误' : core.running ? '代理运行中' : core.desired ? '代理启动中' : '代理已停止';
+    if (s.killswitch && s.killswitch.enabled) {
+      [title, tone] = [ks[0], ks[1]];
+      desc = `${coreText} · ${ks[2]}`;
+    } else {
+      title = coreText;
+      tone = core.last_error ? 'bad' : core.running ? 'ok' : 'off';
+      desc = core.last_error ? '打开主界面查看' : '保护服务未启用';
+    }
+  }
+  $('status').dataset.tone = tone;
+  $('st-title').textContent = title;
+  $('st-desc').textContent = desc;
+  $('bypass').hidden = !(s && s.trust_bypass && s.trust_bypass.enabled);
+
+  const core = (s && s.core) || {};
+  setSwitch($('proxy'), core.desired, connected);
+  for (const b of document.querySelectorAll('.seg button')) {
+    b.setAttribute('aria-pressed', core.mode === b.dataset.mode ? 'true' : 'false');
+    b.disabled = !connected;
+  }
+  setSwitch($('tun'), core.tun, connected);
+  $('tun-sub').textContent = core.tun && core.tun_error ? '启动失败' : core.tun && !core.tun_active && core.running ? '已开启，未生效' : core.tun ? '接管全部流量' : '只走系统代理';
+  $('tun-sub').title = core.tun_error || '';
+  const ks = (s && s.killswitch) || {};
+  setSwitch($('killswitch'), ks.enabled, connected);
+  $('ks-sub').textContent = ks.enabled ? (KS[ks.state] || KS.off)[0] : '未启用';
+
+  // 流量
+  const st = d.stats;
+  if (st && st.running) {
+    $('up').innerHTML = rateHTML(st.up);
+    $('down').innerHTML = rateHTML(st.down);
+    $('conns').textContent = `连接 ${st.connections}`;
+    $('conns').title = `连接 ${st.connections}，经代理 ${st.proxied}`;
+    $('traffic').title = `本次运行 ↑ ${bytes(st.upload_total)}  ↓ ${bytes(st.download_total)}`;
+  } else {
+    $('up').textContent = '–';
+    $('down').textContent = '–';
+    $('conns').textContent = connected ? '代理未运行' : '连接 –';
+    $('traffic').title = '';
+  }
+
+  // 出口：本网络最近一次探测；没有时取严格线路里第一个探测成功的。
+  let egress = '–';
+  if (s) {
+    const n = s.network || {};
+    let e = n.egress && n.egress.ok ? n.egress : null;
+    if (!e && s.strict && s.strict.groups) {
+      const g = s.strict.groups.find((x) => x.egress && x.egress.ok);
+      if (g) e = g.egress;
+    }
+    if (e) egress = `${flag(e.country)} ${e.country || ''} · ${e.ip}`.trim();
+    else if (n.egress && n.egress.error) egress = '探测失败';
+    else egress = '探测中';
+  }
+  $('egress').textContent = egress;
+  $('egress').title = egress;
+
+  let network = '–';
+  if (s && s.network) {
+    const n = s.network, net = n.network || {};
+    network = !net.interface ? '无网络' : net.ssid ? `Wi-Fi「${net.ssid}」` : net.wifi ? 'Wi-Fi' : net.interface;
+    if (n.box && n.box.id) network += ' · 路由盒网络';
+    else if (n.trusted) network += ' · 受信';
+  }
+  $('network').textContent = network;
+  $('network').title = network;
+
+  const u = $('update');
+  $('update-text').textContent = d.update_text || '检查更新';
+  u.title = d.update_text || '检查更新';
+  u.classList.toggle('ready', !!d.restart_ready);
+}
+
+async function refresh() {
+  if (!invoke || busy) return;
+  busy = true;
+  try { render(await invoke('tray_data')); } catch (e) { /* 外壳不可用时保持原样 */ } finally { busy = false; }
+}
+function start() {
+  if (timer) return;
+  refresh();
+  timer = setInterval(refresh, 1000);
+}
+function stop() {
+  clearInterval(timer);
+  timer = null;
+  closeMore();
+}
+async function act(id) {
+  if (!invoke) return;
+  closeMore();
+  try { await invoke('tray_action', { id }); } catch (e) {}
+  setTimeout(refresh, 400);
+}
+
+function closeMore() { $('more').hidden = true; $('more-btn').setAttribute('aria-expanded', 'false'); }
+
+$('open').onclick = () => act('open');
+// 退出：停止代理并退出应用（后台服务保留）。外壳在主窗口弹出退出确认框（检查在运行的 AI 应用、提醒关网页），确认后才退出。
+$('quit').onclick = () => act('quit_all');
+$('update').onclick = () => act('update');
+$('proxy').onclick = () => act('proxy');
+$('tun').onclick = () => act('tun');
+$('killswitch').onclick = () => act('killswitch');
+for (const b of document.querySelectorAll('.seg button')) b.onclick = () => act(b.dataset.mode);
+for (const b of document.querySelectorAll('.more button')) b.onclick = () => act(b.dataset.act);
+$('more-btn').onclick = (e) => {
+  e.stopPropagation();
+  const open = $('more').hidden;
+  $('more').hidden = !open;
+  $('more-btn').setAttribute('aria-expanded', open ? 'true' : 'false');
+};
+document.addEventListener('click', (e) => { if (!$('more').contains(e.target)) closeMore(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('more').hidden) closeMore(); } });
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+window.addEventListener('tray-shown', start);
+window.addEventListener('tray-hidden', stop);
+if (document.visibilityState === 'visible') refresh();
+</script>
+</body>
+</html>

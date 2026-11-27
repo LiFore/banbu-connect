@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-service-outdated"
+description = "Enables the service_outdated command without any pre-configured scope."
+commands.allow = ["service_outdated"]
+
+[[permission]]
+identifier = "deny-service-outdated"
+description = "Denies the service_outdated command without any pre-configured scope."
+commands.deny = ["service_outdated"]

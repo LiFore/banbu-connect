@@ -1,0 +1,88 @@
+/* 页头、筛选栏、行内操作的对齐。路由盒和桌面端共用，桌面端的收紧见 desktop.css。 */
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+h3.page-title {
+  margin: 0;
+}
+
+.page-count {
+  margin-left: 8px;
+  font-size: 13px;
+  font-weight: 400;
+  opacity: 0.55;
+}
+
+.page-actions,
+.table-toolbar-end {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.table-toolbar-end {
+  margin-left: auto;
+}
+
+/* 窄窗口时让表格内部横向滚动，名称不要被挤成逐字折行 */
+.node-name {
+  min-width: 160px;
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* 登录页 */
+.login-page {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.login-card {
+  width: 360px;
+  max-width: 100%;
+}
+
+.login-hint {
+  margin-top: 16px;
+  margin-bottom: 0 !important;
+}
+
+/* 表格里放长文字的标签：单行省略，完整内容在悬浮提示里 */
+.tag-ellipsis {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* 操作步骤：编号列表，步骤之间留出间距 */
+.setup-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding-left: 20px;
+}

@@ -1,0 +1,19 @@
+{
+  "suffixes": [
+    "claude.ai",
+    "claude.com",
+    "clau.de",
+    "anthropic.com",
+    "claudeusercontent.com",
+    "claudemcpclient.com",
+    "chatgpt.com",
+    "openai.com",
+    "oaistatic.com",
+    "oaiusercontent.com"
+  ],
+  "cidrs": [
+    "160.79.104.0/23",
+    "153.61.224.0/22",
+    "2607:6bc0::/48"
+  ]
+}

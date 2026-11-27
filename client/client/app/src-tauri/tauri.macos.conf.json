@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Banbu Connect",
+        "url": "index.html",
+        "width": 400,
+        "height": 700,
+        "minWidth": 360,
+        "minHeight": 560,
+        "visible": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 16, "y": 24 }
+      }
+    ]
+  },
+  "bundle": {
+    "macOS": {
+      "signingIdentity": "-"
+    }
+  }
+}

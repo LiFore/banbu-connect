@@ -1,0 +1,27 @@
+# Banbu Connect 管理服务（boxctl server）的 systemd 单元。
+# 安装：cp deploy/banbu-connect.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now banbu-connect
+[Unit]
+Description=Banbu Connect 管理服务
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# 三选一，见 client/README.md「管理服务与配置下发」：
+#   自签名证书：  -listen 0.0.0.0:8443
+#   已有证书：    -listen 0.0.0.0:443 -tls-cert /etc/banbu-connect/fullchain.pem -tls-key /etc/banbu-connect/privkey.pem
+#   反向代理后面：-listen 127.0.0.1:8080 -plain-http
+ExecStart=/usr/local/bin/boxctl server -listen 0.0.0.0:8443 -data-dir /var/lib/banbu-connect
+DynamicUser=yes
+StateDirectory=banbu-connect
+StateDirectoryMode=0700
+# 监听 443 等低端口时需要
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,33 @@
+#!/bin/sh /etc/rc.common
+# Mihomo 内核独立服务（ADR-045）：面板重启、升级不影响内核。配置由面板生成在 <data_dir>/core/config.yaml，
+# 面板通过控制接口热重载；内核崩溃时 procd 用同一份配置重启它。用户在面板里停用内核时，面板会 disable 本服务。
+# 内核要创建 TUN 网卡、写 auto-redirect 的 nftables 规则，以 root 运行。
+
+START=95
+STOP=12
+USE_PROCD=1
+PROG=/usr/bin/boxctl
+RUN_DIR=/var/run/boxctl
+
+start_service() {
+	local data_dir
+	config_load boxctl
+	config_get data_dir panel data_dir /etc/boxctl
+	# 面板还没生成过配置（刚安装、从没启用内核）：不启动，等面板来启动
+	[ -f "$data_dir/core/config.yaml" ] || return 0
+	mkdir -p "$RUN_DIR"
+
+	procd_open_instance core
+	procd_set_param command "$PROG" mihomo \
+		-d "$data_dir/core" \
+		-f "$data_dir/core/config.yaml" \
+		-log-file "$RUN_DIR/core.log"
+	procd_set_param pidfile "$RUN_DIR/core.pid"
+	# 崩溃 1 秒后重启，无限重试；guard 在内核离线期间阻断局域网
+	procd_set_param respawn 3600 1 0
+	# 内核打开的连接和规则集文件较多
+	procd_set_param limits nofile="65535 65535"
+	# 正常退出要撤销 TUN 和路由，给足时间再 SIGKILL
+	procd_set_param term_timeout 10
+	procd_close_instance
+}

@@ -1,0 +1,25 @@
+/build/
+/.dev/
+web/node_modules/
+boxctl/internal/webui/dist/*
+!boxctl/internal/webui/dist/.gitkeep
+*.db
+*.db-shm
+*.db-wal
+
+/client/app/node_modules/
+/client/app/src-tauri/target/
+/client/app/src-tauri/gen/
+/client/app/src-tauri/icons/
+/client/app/src-tauri/resources/
+
+/client.zip
+/web/guard.log
+
+.DS_Store
+/dist/
+
+# 本地配置（管理员密码等），不进 git
+.env
+.env.*
+!.env.example

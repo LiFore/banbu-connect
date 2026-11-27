@@ -1,0 +1,26 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "titlebar",
+  "description": "后台服务的网页（主窗口的精简页、完整界面窗口）只能拖动、最小化、最大化和关闭窗口（自绘标题栏），以及打开完整界面、回到精简界面、退出前查看在运行的 AI 应用、退出应用；没有其他 Tauri 权限，见 client/README.md「安全」。",
+  "windows": [
+    "main",
+    "full"
+  ],
+  "local": false,
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:17930/*"
+    ]
+  },
+  "permissions": [
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "allow-shell-open-full",
+    "allow-shell-open-compact",
+    "allow-shell-running-apps",
+    "allow-shell-quit"
+  ]
+}

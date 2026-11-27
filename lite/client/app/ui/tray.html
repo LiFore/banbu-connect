@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banbu Connect Lite</title>
+<!-- 托盘面板：左键点托盘图标弹出（src-tauri/src/tray_panel.rs）。数据经外壳命令 tray_data 取，操作经 tray_action 发，
+     和托盘右键菜单是同一套操作（main.rs 的 on_menu）。尺寸 300×220，与 tray_panel.rs 的 WIDTH、HEIGHT 一致。
+     只放状态（后台进程、管理服务）、打开主界面、更新和退出；账号在主窗口里管理。 -->
+<style>
+:root { color-scheme: light dark; --bg: #f5f6f7; --card: #fff; --subtle: #f0f1f3; --text: #1c2024; --muted: #60666d; --line: #e4e6ea;
+  --accent: #15803d; --accent-soft: #f0fdf4; --on-accent: #fff; --warn: #b45309; --warn-soft: #fffbeb; --bad: #c0271f; --bad-soft: #fef2f2; --off: #8a9097;
+  --up: #2563eb; --down: #15803d; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121416; --card: #1b1e21; --subtle: #24282c; --text: #e7e9ec; --muted: #9aa1a8; --line: #2c3035;
+  --accent: #4ade80; --accent-soft: #10291a; --on-accent: #052e16; --warn: #fbbf24; --warn-soft: #2d230e; --bad: #f58a83; --bad-soft: #2f1716; --off: #7a8188;
+  --up: #60a5fa; --down: #4ade80; } }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--bg); color: var(--text); cursor: default; user-select: none;
+  font: 12px/1.5 "Segoe UI", -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; }
+button { font: inherit; color: inherit; cursor: pointer; }
+[hidden] { display: none !important; }
+
+/* 顶栏：名称、版本，右边是更新（有新版本时高亮） */
+header { flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 8px 6px 12px; }
+header img { width: 18px; height: 18px; }
+header .name { flex: none; font-weight: 600; font-size: 13px; white-space: nowrap; }
+header .ver { flex: none; color: var(--muted); }
+header .fill { flex: 1; }
+.chip { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 132px; height: 24px; padding: 0 8px; border: 1px solid transparent; border-radius: 12px;
+  background: transparent; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip:hover { background: var(--subtle); color: var(--text); }
+.chip svg { flex: none; width: 13px; height: 13px; }
+.chip span { overflow: hidden; text-overflow: ellipsis; }
+.chip.ready { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+main { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 0 8px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+
+/* 状态 + 代理开关 */
+.status { display: flex; align-items: center; gap: 10px; padding: 9px 12px; }
+.status .dot-lg { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--off); }
+.status[data-tone="ok"] .dot-lg { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.status[data-tone="warn"] .dot-lg { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
+.status[data-tone="bad"] .dot-lg { background: var(--bad); box-shadow: 0 0 0 4px var(--bad-soft); }
+.status .text { flex: 1; min-width: 0; }
+.status .title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status .desc { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 信息行 */
+.rows { padding: 2px 0; }
+.row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 3px 12px; }
+.row + .row { border-top: 1px solid var(--line); }
+.row .k { flex: none; width: 32px; color: var(--muted); }
+.row .v { flex: 1; min-width: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .v.mono { font-variant-numeric: tabular-nums; }
+.row .grow { flex: 1; }
+
+/* 底栏：打开主界面、退出（醒目的红色）、更多 */
+footer { flex: none; display: flex; align-items: center; gap: 6px; padding: 8px; }
+.btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--card); white-space: nowrap; font-weight: 600; }
+.btn:hover { border-color: var(--muted); }
+.btn svg { width: 14px; height: 14px; }
+.btn.quit { border-color: var(--bad); background: var(--bad); color: #fff; }
+.btn.quit:hover { filter: brightness(1.08); }
+.icon-btn { flex: none; display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); }
+.icon-btn:hover { background: var(--subtle); color: var(--text); }
+.icon-btn svg { width: 16px; height: 16px; }
+
+/* 更多 */
+.more { position: absolute; right: 8px; bottom: 44px; width: 200px; padding: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.16); }
+.more button { display: block; width: 100%; padding: 6px 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; }
+.more button:hover { background: var(--subtle); }
+.more hr { margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <img src="logo.png" alt="">
+  <span class="name">Banbu Connect Lite</span>
+  <span class="ver" id="ver"></span>
+  <span class="fill"></span>
+  <button type="button" class="chip" id="update" title="检查更新">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg>
+    <span id="update-text">检查更新</span>
+  </button>
+</header>
+
+<main>
+  <section class="card">
+    <div class="status" id="status" data-tone="off">
+      <span class="dot-lg" aria-hidden="true"></span>
+      <div class="text">
+        <div class="title" id="st-title">正在连接后台进程…</div>
+        <div class="desc" id="st-desc">&nbsp;</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card rows">
+    <div class="row"><span class="k">服务</span><span class="v" id="server">–</span></div>
+    <div class="row"><span class="k">同步</span><span class="v mono" id="sync">–</span></div>
+  </section>
+</main>
+
+<footer>
+  <button type="button" class="btn" id="open">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M2 6h12"/></svg>
+    打开主界面
+  </button>
+  <button type="button" class="btn quit" id="quit" title="退出应用">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 2v6"/><path d="M4.6 4.2a5 5 0 1 0 6.8 0"/></svg>
+    <span>退出</span>
+  </button>
+  <button type="button" class="icon-btn" id="more-btn" title="更多" aria-label="更多" aria-haspopup="menu" aria-expanded="false">
+    <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></svg>
+  </button>
+</footer>
+
+<div class="more" id="more" role="menu" hidden>
+  <button type="button" role="menuitem" data-act="log">查看日志</button>
+</div>
+
+<script>
+const invoke = window.__TAURI__ && window.__TAURI__.core ? window.__TAURI__.core.invoke : null;
+const $ = (id) => document.getElementById(id);
+
+let timer = null, busy = false;
+
+function host(url) {
+  try { return new URL(url).host; } catch (e) { return url || ''; }
+}
+function ago(iso) {
+  if (!iso) return '还没有同步';
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (s < 60) return '刚刚';
+  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
+  if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
+  return `${Math.floor(s / 86400)} 天前`;
+}
+function render(d) {
+  $('ver').textContent = d.app_version ? 'v' + d.app_version : '';
+  const s = d.status;
+  let tone = 'off', title = '后台进程未连接', desc = d.backend_error ? '后台进程没有启动，打开主界面查看' : '正在启动…';
+  let server = '–', sync = '–';
+  if (s) {
+    const sv = s.server || {};
+    if (!sv.bound) {
+      [tone, title, desc] = ['warn', '未绑定管理服务', '打开主界面绑定后才能使用托管的账号'];
+    } else if (sv.last_error) {
+      [tone, title, desc] = ['bad', '管理服务连接失败', sv.last_error];
+    } else {
+      [tone, title, desc] = ['ok', '已连接管理服务', '账号在主界面里管理'];
+    }
+    server = sv.bound ? host(sv.url) : '未绑定';
+    sync = sv.bound ? ago(sv.last_sync) : '–';
+  }
+  $('status').dataset.tone = tone;
+  $('st-title').textContent = title;
+  $('st-desc').textContent = desc;
+  $('st-desc').title = desc;
+  $('server').textContent = server;
+  $('server').title = (s && s.server && s.server.url) || '';
+  $('sync').textContent = sync;
+
+  const u = $('update');
+  $('update-text').textContent = d.update_text || '检查更新';
+  u.title = d.update_text || '检查更新';
+  u.classList.toggle('ready', !!d.restart_ready);
+}
+
+async function refresh() {
+  if (!invoke || busy) return;
+  busy = true;
+  try { render(await invoke('tray_data')); } catch (e) { /* 外壳不可用时保持原样 */ } finally { busy = false; }
+}
+function start() {
+  if (timer) return;
+  refresh();
+  timer = setInterval(refresh, 2000);
+}
+function stop() {
+  clearInterval(timer);
+  timer = null;
+  closeMore();
+}
+async function act(id) {
+  if (!invoke) return;
+  closeMore();
+  try { await invoke('tray_action', { id }); } catch (e) {}
+  setTimeout(refresh, 400);
+}
+
+function closeMore() { $('more').hidden = true; $('more-btn').setAttribute('aria-expanded', 'false'); }
+
+$('open').onclick = () => act('open');
+$('quit').onclick = () => act('quit');
+$('update').onclick = () => act('update');
+for (const b of document.querySelectorAll('.more button')) b.onclick = () => act(b.dataset.act);
+$('more-btn').onclick = (e) => {
+  e.stopPropagation();
+  const open = $('more').hidden;
+  $('more').hidden = !open;
+  $('more-btn').setAttribute('aria-expanded', open ? 'true' : 'false');
+};
+document.addEventListener('click', (e) => { if (!$('more').contains(e.target)) closeMore(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('more').hidden) closeMore(); } });
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+window.addEventListener('tray-shown', start);
+window.addEventListener('tray-hidden', stop);
+if (document.visibilityState === 'visible') refresh();
+</script>
+</body>
+</html>

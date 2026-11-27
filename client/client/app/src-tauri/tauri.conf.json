@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Banbu Connect",
+  "version": "0.2.27",
+  "identifier": "com.banbu.connect",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Banbu Connect",
+        "url": "index.html",
+        "width": 400,
+        "height": 700,
+        "minWidth": 360,
+        "minHeight": 560,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "resources/*"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "infoPlist": "Info.plist"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZGQjY0QzBBQTQwMTVFRUEKUldUcVhnR2tDa3kyYjJSZ2g4ZTc1TGdrN2V1RncvVVg0elF6WVkySWs0ZjhlT25ocThJRWZpbnIK",
+      "endpoints": [
+        "http://127.0.0.1:17930/api/v1/desktop/update/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "dangerousInsecureTransportProtocol": true,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

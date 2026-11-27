@@ -1,0 +1,15 @@
+/build/
+/.dev/
+web/node_modules/
+boxctl/internal/webui/dist/*
+!boxctl/internal/webui/dist/.gitkeep
+*.db
+*.db-shm
+*.db-wal
+
+.DS_Store
+/dist/
+
+# 本地配置（管理员密码等），不进 git
+.env
+.env.*

@@ -1,0 +1,8 @@
+.DS_Store
+# 本地发布产物与归档，不进 git
+/releases/
+/archive/
+/.bento/
+.env
+.env.*
+!.env.example

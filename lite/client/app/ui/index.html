@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banbu Connect Lite</title>
+<style>
+:root { color-scheme: light dark; --bg: #f5f6f7; --card: #fff; --text: #1c2024; --muted: #60666d; --line: #e4e6ea; --accent: #15803d; --on-accent: #fff; --bad: #c0271f; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121416; --card: #1b1e21; --text: #e7e9ec; --muted: #9aa1a8; --line: #2c3035; --accent: #4ade80; --on-accent: #052e16; --bad: #f58a83; } }
+body { margin: 0; height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: var(--bg); color: var(--text); cursor: default; user-select: none; font: 14px/1.6 "Segoe UI", -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; }
+/* 系统标题栏已去掉（macOS 叠加红绿灯，Windows 无边框）：顶部留一条 44px 可拖动的栏，与管理界面的顶栏同高 */
+.titlebar { flex: none; height: 44px; display: flex; justify-content: flex-end; }
+.titlebar button { width: 46px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 16px; line-height: 44px; cursor: default; }
+.titlebar button:hover { background: var(--line); color: var(--text); }
+.titlebar button.close:hover { background: #c42b1c; color: #fff; }
+.body { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 8px 16px 24px; }
+.panel { width: 480px; max-width: 100%; margin: auto; }
+.hero { text-align: center; margin-bottom: 24px; }
+.hero img { width: 56px; height: 56px; }
+.hero h1 { font-size: 20px; line-height: 28px; font-weight: 600; margin: 12px 0 4px; }
+.hero p { margin: 0; color: var(--muted); }
+main { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; }
+h2 { font-size: 15px; margin: 0 0 4px; }
+main p { margin: 0 0 12px; color: var(--muted); }
+button { font: inherit; padding: 5px 16px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); cursor: pointer; }
+button:disabled { opacity: .6; cursor: default; }
+[hidden] { display: none !important; }
+#error { color: var(--bad); margin: 12px 0 0; white-space: pre-wrap; user-select: text; font-size: 13px; }
+.spin { display: inline-block; width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="titlebar" data-tauri-drag-region>
+  <button type="button" id="win-min" aria-label="最小化" hidden>&#x2013;</button>
+  <button type="button" id="win-close" class="close" aria-label="关闭" hidden>&#x2715;</button>
+</div>
+<div class="body" data-tauri-drag-region>
+<div class="panel">
+  <div class="hero">
+    <img src="logo.png" alt="">
+    <h1>Banbu Connect Lite</h1>
+    <p>Claude、Codex、Gemini 账号管理</p>
+  </div>
+  <main>
+    <h2 id="title"><span class="spin" id="spin"></span>正在启动</h2>
+    <p id="desc">正在启动后台进程，请稍候。</p>
+    <button id="retry" type="button" hidden>重试</button>
+    <p id="error" hidden></p>
+  </main>
+</div>
+</div>
+<script>
+"use strict";
+// 启动页：外壳拉起后台进程（src-tauri/src/backend.rs），就绪后进入后台进程提供的主界面；
+// 起不来时显示原因（backend.log 的最后几行）和「重试」。不需要安装、不需要管理员权限。
+const { invoke } = window.__TAURI__.core;
+const $ = (id) => document.getElementById(id);
+// Windows 上没有系统标题栏，自己画最小化和关闭（关闭只是隐藏到托盘）。
+if (/Windows/i.test(navigator.userAgent)) {
+  const w = window.__TAURI__.window.getCurrentWindow();
+  $("win-min").hidden = false;
+  $("win-close").hidden = false;
+  $("win-min").onclick = () => w.minimize();
+  $("win-close").onclick = () => w.close();
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let waited = 0;
+function setTitle(text, spinning) {
+  $("title").textContent = text;
+  if (spinning) $("title").prepend(Object.assign(document.createElement("span"), { className: "spin" }));
+}
+async function loop() {
+  for (;;) {
+    const url = await invoke("service_url").catch(() => null);
+    if (url) { location.replace(url); return; }
+    const err = await invoke("backend_error").catch(() => null);
+    if (err) {
+      setTitle("后台进程没有启动", false);
+      $("desc").textContent = "可以点「重试」；托盘菜单「查看日志」里有详细记录。";
+      $("error").hidden = false;
+      $("error").textContent = err;
+      $("retry").hidden = false;
+    } else if (waited > 15000) {
+      setTitle("后台进程启动较慢", true);
+      $("desc").textContent = "还在等待后台进程响应。长时间没有进展时，可以点「重试」。";
+      $("retry").hidden = false;
+    }
+    await sleep(1000);
+    waited += 1000;
+  }
+}
+$("retry").addEventListener("click", async () => {
+  $("retry").disabled = true;
+  $("error").hidden = true;
+  setTitle("正在重启", true);
+  $("desc").textContent = "正在重启后台进程，请稍候。";
+  await invoke("restart_backend").catch(() => {});
+  waited = 0;
+  $("retry").disabled = false;
+  $("retry").hidden = true;
+});
+loop();
+</script>
+</body>
+</html>

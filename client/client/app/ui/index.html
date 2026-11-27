@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banbu Connect</title>
+<style>
+:root { color-scheme: light dark; --bg: #f5f6f7; --card: #fff; --text: #1c2024; --muted: #60666d; --line: #e4e6ea; --accent: #15803d; --on-accent: #fff; --bad: #c0271f; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121416; --card: #1b1e21; --text: #e7e9ec; --muted: #9aa1a8; --line: #2c3035; --accent: #4ade80; --on-accent: #052e16; --bad: #f58a83; } }
+body { margin: 0; height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: var(--bg); color: var(--text); cursor: default; user-select: none; font: 14px/1.6 "Segoe UI", -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; }
+/* 系统标题栏已去掉（macOS 叠加红绿灯，Windows 无边框）：顶部留一条 44px 可拖动的栏，与管理界面的顶栏同高 */
+.titlebar { flex: none; height: 44px; display: flex; justify-content: flex-end; }
+.titlebar button { width: 46px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 16px; line-height: 44px; cursor: default; }
+.titlebar button:hover { background: var(--line); color: var(--text); }
+.titlebar button.close:hover { background: #c42b1c; color: #fff; }
+.body { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 8px 16px 24px; }
+.panel { width: 480px; max-width: 100%; margin: auto; }
+.hero { text-align: center; margin-bottom: 24px; }
+.hero img { width: 56px; height: 56px; }
+.hero h1 { font-size: 20px; line-height: 28px; font-weight: 600; margin: 12px 0 4px; }
+.hero p { margin: 0; color: var(--muted); }
+/* 三步：与管理界面里的引导屏一致（web/src/pages/desktop/Onboarding.tsx） */
+.steps { display: flex; gap: 8px; margin: 0 0 16px; padding: 0; list-style: none; font-size: 13px; }
+.steps li { flex: 1; display: flex; align-items: center; gap: 8px; color: var(--muted); white-space: nowrap; }
+.steps li + li::before { content: ""; flex: 0 1 24px; height: 1px; background: var(--line); }
+.steps b { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; border: 1px solid var(--line); }
+.steps li.on { color: var(--text); font-weight: 600; }
+.steps li.on b { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+main { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; }
+h2 { font-size: 15px; margin: 0 0 4px; }
+main p { margin: 0 0 12px; color: var(--muted); }
+button { font: inherit; padding: 5px 16px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); cursor: pointer; }
+button:disabled { opacity: .6; cursor: default; }
+[hidden] { display: none !important; }
+#error, #repair-error { color: var(--bad); margin: 12px 0 0; white-space: pre-wrap; user-select: text; }
+/* 修复工具：服务起不来时清除留在系统里的规则，要二次确认 */
+.link { display: block; margin: 12px auto 0; padding: 4px 8px; border: 0; background: transparent; color: var(--muted); font-size: 13px; }
+.link:hover { color: var(--text); }
+#repair { margin-top: 12px; }
+#repair ul { margin: 0 0 12px; padding-left: 20px; color: var(--muted); font-size: 13px; }
+.ghost { background: transparent; color: var(--text); border-color: var(--line); }
+.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+.confirm { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--bad); color: var(--text); font-size: 13px; }
+.actions { display: flex; gap: 8px; justify-content: flex-end; }
+#repair-ok { color: var(--accent); margin: 12px 0 0; }
+</style>
+</head>
+<body>
+<div class="titlebar" data-tauri-drag-region>
+  <button type="button" id="win-min" aria-label="最小化" hidden>&#x2013;</button>
+  <button type="button" id="win-close" class="close" aria-label="关闭" hidden>&#x2715;</button>
+</div>
+<div class="body" data-tauri-drag-region>
+<div class="panel">
+  <div class="hero">
+    <img src="logo.png" alt="">
+    <h1>欢迎使用 Banbu Connect</h1>
+    <p id="welcome">三步完成设置，之后在菜单栏或托盘里就能开关代理。</p>
+  </div>
+  <ol class="steps" id="steps" aria-label="设置步骤">
+    <li class="on" aria-current="step"><b>1</b>安装后台服务</li>
+    <li><b>2</b>获取线路</li>
+    <li><b>3</b>开启保护</li>
+  </ol>
+  <main>
+    <h2 id="title">正在连接后台服务</h2>
+    <p id="desc">请稍候。</p>
+    <button id="install" type="button" hidden>安装后台服务</button>
+    <p id="error" hidden></p>
+  </main>
+  <button type="button" class="link" id="repair-open" hidden>后台服务起不来、网络不通？打开修复工具</button>
+  <main id="repair" hidden>
+    <h2>修复工具</h2>
+    <p>后台服务没有运行时，之前安装的保护规则仍留在系统里：受保护的服务（Claude、ChatGPT 等）会解析失败或被拦截，开了 DNS 防泄漏时整机 DNS 也可能不通。清除下面这些规则后恢复直连：</p>
+    <ul id="repair-list"></ul>
+    <div id="repair-confirm" class="confirm" hidden>
+      <b>再次确认：</b>清除后受保护的服务不再经过代理、也不再被保护服务拦截，会直接连接，可能暴露真实 IP。后台服务恢复运行后，会按设置重新安装这些规则。确定要清除吗？
+    </div>
+    <div class="actions">
+      <button type="button" class="ghost" id="repair-cancel" hidden>取消</button>
+      <button type="button" class="ghost" id="repair-start">清除规则…</button>
+      <button type="button" class="danger" id="repair-go" hidden>确认清除</button>
+    </div>
+    <p id="repair-ok" hidden></p>
+    <p id="repair-error" hidden></p>
+  </main>
+</div>
+</div>
+<script>
+"use strict";
+const { invoke } = window.__TAURI__.core;
+const $ = (id) => document.getElementById(id);
+
+// Windows 上没有系统标题栏，自己画最小化和关闭（关闭只是隐藏到托盘）。
+if (/Windows/i.test(navigator.userAgent)) {
+  const w = window.__TAURI__.window.getCurrentWindow();
+  $("win-min").hidden = false;
+  $("win-close").hidden = false;
+  $("win-min").onclick = () => w.minimize();
+  $("win-close").onclick = () => w.close();
+}
+
+async function connect() {
+  try {
+    const url = await invoke("service_url");
+    if (url) { location.replace(url); return true; }
+  } catch (e) {
+    showError(e);
+  }
+  return false;
+}
+
+function showError(e) {
+  $("error").hidden = false;
+  $("error").textContent = String(e);
+}
+
+// 安装后等服务起来并核对版本：service_url 只在服务版本不比应用旧时才返回地址。
+async function waitForService() {
+  for (let i = 0; i < 30; i++) {
+    const url = await invoke("service_url").catch(() => null);
+    if (url) {
+      const app = await window.__TAURI__.app.getVersion().catch(() => "");
+      $("title").textContent = "后台服务已就绪";
+      $("desc").textContent = app ? `后台服务已是 ${app}，与应用一致，正在进入主界面…` : "正在进入主界面…";
+      await new Promise((r) => setTimeout(r, 1200));
+      location.replace(url);
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  // 服务起来了但版本对不上（比如应用和服务不是同一次构建），说清楚，别笼统说没响应。
+  const old = await invoke("service_outdated").catch(() => null);
+  if (old) {
+    const app = await window.__TAURI__.app.getVersion().catch(() => "");
+    $("title").textContent = "后台服务版本不一致";
+    $("desc").textContent = `安装已完成，后台服务在运行，但版本是 ${old}，比应用（${app}）旧。可能是安装包里的服务程序和应用不是同一次构建，请联系管理员重新构建发布；也可以重试安装。`;
+  } else {
+    $("title").textContent = "后台服务没有响应";
+    $("desc").textContent = "安装已完成，但服务没有在预期时间内启动。可以重新尝试；托盘菜单「查看日志」里有详细记录。";
+  }
+  $("install").hidden = false;
+  $("install").disabled = false;
+}
+
+$("install").addEventListener("click", async () => {
+  $("install").disabled = true;
+  $("error").hidden = true;
+  $("title").textContent = "正在安装";
+  $("desc").textContent = "请在系统弹窗里授权。";
+  // 授权弹窗可能被别的窗口挡住，或者没弹出来：等一会儿给出提示和手动安装的办法。
+  const hint = setTimeout(() => {
+    $("desc").textContent = mac
+      ? "没看到授权弹窗？它可能在别的窗口后面，可以按 Command+Tab 找一下。也可以在「终端」里运行下面的命令手动安装（设置和数据都会保留）："
+      : "没看到授权弹窗？它可能在任务栏里闪烁。也可以用管理员身份运行应用目录下的 resources\\boxctl.exe desktop install。";
+    if (mac) {
+      $("error").hidden = false;
+      $("error").textContent = 'sudo "/Applications/Banbu Connect.app/Contents/Resources/resources/boxctl" desktop install -user "$USER" -token-path "$HOME/Library/Application Support/Banbu Connect/token"';
+    }
+  }, 20000);
+  try {
+    await invoke("install_service");
+    clearTimeout(hint);
+    $("error").hidden = true;
+    $("desc").textContent = "正在启动后台服务。";
+    await waitForService();
+  } catch (e) {
+    clearTimeout(hint);
+    showError(e);
+    $("title").textContent = "安装没有完成";
+    $("desc").textContent = "代理内核和保护服务需要管理员权限才能运行。";
+    $("install").disabled = false;
+  }
+});
+
+// ---- 修复工具 ----
+const mac = /Mac OS X|Macintosh/i.test(navigator.userAgent);
+for (const item of mac
+  ? ["保护服务的 DNS 规则（/etc/resolver 下本程序写的文件）", "保护服务的 pf 拦截规则（com.apple/boxguard）", "DNS 防泄漏的 pf 规则（com.apple/boxguard-dns）", "指向本机（127.0.0.1）的系统代理和自动代理"]
+  : ["保护服务的 DNS 规则（NRPT，boxguard）", "保护服务的防火墙出站阻止（boxguard）", "DNS 防泄漏的防火墙规则（boxguard-dns）", "指向本机（127.0.0.1）的系统代理和自动代理"]) {
+  const li = document.createElement("li");
+  li.textContent = item;
+  $("repair-list").append(li);
+}
+
+function repairStep(confirming) {
+  $("repair-confirm").hidden = !confirming;
+  $("repair-cancel").hidden = !confirming;
+  $("repair-go").hidden = !confirming;
+  $("repair-start").hidden = confirming;
+}
+
+$("repair-open").addEventListener("click", () => {
+  $("repair-open").hidden = true;
+  $("repair").hidden = false;
+  $("repair").scrollIntoView({ block: "nearest" });
+});
+// 第一次确认：展开警告；第二次确认：真正执行（之后还有系统授权弹窗）。
+$("repair-start").addEventListener("click", () => {
+  $("repair-ok").hidden = true;
+  $("repair-error").hidden = true;
+  repairStep(true);
+});
+$("repair-cancel").addEventListener("click", () => repairStep(false));
+$("repair-go").addEventListener("click", async () => {
+  $("repair-go").disabled = $("repair-cancel").disabled = true;
+  $("repair-go").textContent = "正在清除…";
+  try {
+    await invoke("repair_system");
+    $("repair-ok").hidden = false;
+    $("repair-ok").textContent = "已清除。受保护的服务和 DNS 已恢复直连，已打开的浏览器可能要重启才会生效。";
+  } catch (e) {
+    $("repair-error").hidden = false;
+    $("repair-error").textContent = String(e);
+  } finally {
+    $("repair-go").disabled = $("repair-cancel").disabled = false;
+    $("repair-go").textContent = "确认清除";
+    repairStep(false);
+  }
+});
+
+(async () => {
+  if (await connect()) return;
+  $("repair-open").hidden = false;
+  const old = await invoke("service_outdated").catch(() => null);
+  if (old) {
+    // 应用已经更新，后台服务还是旧版本：重新安装会替换服务程序，设置和数据都保留。不是首次设置，不显示步骤。
+    $("steps").hidden = true;
+    $("welcome").textContent = "应用已经更新。";
+    $("title").textContent = "需要更新后台服务";
+    $("desc").textContent = `应用已更新，后台服务还是 ${old}。更新需要管理员授权，设置和数据都会保留。`;
+    $("install").textContent = "更新后台服务";
+  } else {
+    $("title").textContent = "需要安装后台服务";
+    $("desc").textContent = "代理内核和保护服务以系统服务运行，需要管理员权限，只需要授权一次。";
+  }
+  $("install").hidden = false;
+})();
+</script>
+</body>
+</html>

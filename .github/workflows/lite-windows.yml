@@ -1,0 +1,92 @@
+name: Lite Windows 打包
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 版本号 x.y.z（留空沿用 tauri.conf.json 里的版本）
+        required: false
+        type: string
+      skip_upload:
+        description: 不上传到管理服务（只打包）
+        required: false
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'lite-v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: lite
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: lite/boxctl/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            lite/web/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: lite/client/app/src-tauri
+
+      - name: 解析版本号
+        id: ver
+        run: |
+          v="${{ inputs.version }}"
+          if [ -z "$v" ] && [[ "$GITHUB_REF_NAME" == lite-v* ]]; then
+            v="${GITHUB_REF_NAME#lite-v}"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      # 更新包签名私钥放在仓库 Secrets：TAURI_SIGNING_PRIVATE_KEY（私钥内容）、
+      # 可选 TAURI_SIGNING_PRIVATE_KEY_PASSWORD。没配就只打安装包，不生成 OTA 更新包。
+      - name: 写入签名私钥
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then
+            printf '%s' "$KEY" > "$RUNNER_TEMP/banbu-connect.key"
+            echo "BANBU_SIGNING_KEY=$RUNNER_TEMP/banbu-connect.key" >> "$GITHUB_ENV"
+          fi
+
+      - name: 打包
+        env:
+          BANBU_NO_UPLOAD: '1'
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: ./scripts/build-app.sh ${{ steps.ver.outputs.version }}
+
+      # 上传到管理服务（只上传、不发布，到管理页面「客户端更新」里发布）。
+      # Secrets：BANBU_SERVER_URL、BANBU_ADMIN_PASSWORD；自签名证书时再配 BANBU_SERVER_FINGERPRINT；
+      # BANBU_RELEASE_NOTES 可选。需要签名私钥（否则没有 .sig，不能上传）。
+      # 不想上传时，手动运行选择「不上传」。
+      - name: 上传更新包到管理服务
+        if: ${{ env.BANBU_SIGNING_KEY != '' && inputs.skip_upload != true }}
+        env:
+          BANBU_SERVER_URL: ${{ secrets.BANBU_SERVER_URL }}
+          BANBU_ADMIN_PASSWORD: ${{ secrets.BANBU_ADMIN_PASSWORD }}
+          BANBU_SERVER_FINGERPRINT: ${{ secrets.BANBU_SERVER_FINGERPRINT }}
+          BANBU_RELEASE_NOTES: ${{ secrets.BANBU_RELEASE_NOTES }}
+        run: ./scripts/upload-release.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: banbu-connect-lite-windows
+          if-no-files-found: error
+          path: |
+            lite/client/app/src-tauri/target/release/bundle/nsis/*-setup.exe
+            lite/client/app/src-tauri/target/release/bundle/nsis/*-setup.exe.sig

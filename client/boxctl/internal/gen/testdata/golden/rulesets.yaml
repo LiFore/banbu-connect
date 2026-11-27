@@ -1,0 +1,140 @@
+allow-lan: false
+bind-address: 127.0.0.1
+dns:
+    default-nameserver:
+        - https://223.5.5.5/dns-query
+        - https://1.12.12.12/dns-query
+    enable: true
+    enhanced-mode: redir-host
+    listen: 127.0.0.1:1053
+    nameserver:
+        - tls://1.1.1.1:853#代理模式
+        - https://1.1.1.1/dns-query#代理模式
+    nameserver-policy:
+        geosite:cn:
+            - https://223.5.5.5/dns-query
+            - https://1.12.12.12/dns-query
+        geosite:geolocation-!cn:
+            - tls://1.1.1.1:853#代理模式
+            - https://1.1.1.1/dns-query#代理模式
+        us.example.com:
+            - https://223.5.5.5/dns-query
+            - https://1.12.12.12/dns-query
+    prefer-h3: false
+external-controller: 127.0.0.1:19190
+find-process-mode: strict
+geodata-mode: true
+geox-url:
+    asn: https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/GeoLite2-ASN.mmdb
+    geoip: https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip-lite.dat
+    geosite: https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat
+    mmdb: https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country-lite.mmdb
+ipv6: true
+log-level: warning
+mixed-port: 7890
+mode: rule
+profile:
+    store-selected: true
+proxies:
+    - cipher: aes-128-gcm
+      name: 香港 - 01
+      password: x
+      port: 8388
+      server: 198.51.100.1
+      type: ss
+    - cipher: aes-128-gcm
+      name: 美国 - 01
+      password: x
+      port: 8388
+      server: us.example.com
+      type: ss
+proxy-groups:
+    - name: Claude
+      proxies:
+        - 香港 - 01
+      type: select
+    - name: 代理模式
+      proxies:
+        - 香港 - 01
+        - DIRECT
+      type: select
+    - name: 漏网之鱼
+      proxies:
+        - DIRECT
+        - 代理模式
+      type: select
+    - hidden: true
+      interval: 300
+      name: 自动
+      proxies:
+        - 香港 - 01
+      tolerance: 50
+      type: url-test
+      url: http://t
+    - interval: 600
+      lazy: true
+      name: 负载
+      proxies:
+        - 香港 - 01
+        - 美国 - 01
+      strategy: round-robin
+      type: load-balance
+      url: http://t
+rule-providers:
+    claude:
+        behavior: classical
+        interval: 86400
+        path: ./ruleset/claude.yaml
+        proxy: 代理模式
+        type: http
+        url: https://example.com/claude.yaml
+    cn:
+        behavior: ipcidr
+        format: text
+        interval: 86400
+        path: ./ruleset/cn.list
+        proxy: 代理模式
+        type: http
+        url: https://example.com/cn.txt
+rules:
+    - DOMAIN-SUFFIX,ping0.cc,Claude
+    - AND,((DOMAIN-SUFFIX,anthropic.com),(NETWORK,udp)),REJECT
+    - DOMAIN-SUFFIX,anthropic.com,Claude
+    - AND,((DOMAIN-SUFFIX,claude.ai),(NETWORK,udp)),REJECT
+    - DOMAIN-SUFFIX,claude.ai,Claude
+    - AND,((DOMAIN-SUFFIX,off.example.com),(NETWORK,udp)),REJECT
+    - DOMAIN-SUFFIX,off.example.com,Claude
+    - DOMAIN,testingcf.jsdelivr.net,DIRECT
+    - RULE-SET,claude,Claude
+    - RULE-SET,cn,DIRECT,no-resolve
+    - GEOIP,LAN,DIRECT,no-resolve
+    - MATCH,漏网之鱼
+secret: s
+sniffer:
+    enable: true
+    force-dns-mapping: true
+    parse-pure-ip: true
+    sniff:
+        HTTP:
+            override-destination: true
+            ports:
+                - 80
+                - 8080-8880
+        QUIC:
+            ports:
+                - 443
+                - 8443
+        TLS:
+            ports:
+                - 443
+                - 8443
+tcp-concurrent: true
+tun:
+    auto-detect-interface: true
+    auto-redirect: true
+    auto-route: true
+    device: boxtun
+    dns-hijack: []
+    enable: true
+    stack: system
+unified-delay: true
