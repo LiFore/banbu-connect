@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Alert, App, Button, Drawer, Empty, Input, Modal, Select, Space, Table, Tag, Typography } from 'antd'
 import { BarChartOutlined, CheckOutlined, CloseOutlined, EditOutlined, MonitorOutlined, PlusOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
-import { serverApi, type Device, type DeviceDiagnostics, type Enrollment, type ServerInfo } from '../../serverApi'
+import { serverApi, type Device, type DeviceDiagnostics, type Enrollment, type ServerInfo, type User } from '../../serverApi'
 import { PageHeader, RowAction, RowDelete, tableEmpty } from '../common'
 import DeviceAccessCard from './DeviceAccess'
 import { DIAG_KINDS, DIAG_SCOPE, DiagRecordTable, DiagSnapshotView } from '../diagnostics'
@@ -14,6 +14,7 @@ export default function Devices() {
   const { message, modal } = App.useApp()
   const navigate = useNavigate()
   const [devices, setDevices] = useState<Device[]>([])
+  const [users, setUsers] = useState<User[]>([])
   const [info, setInfo] = useState<ServerInfo>()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -27,9 +28,10 @@ export default function Devices() {
 
   const reload = useCallback(
     () =>
-      Promise.all([serverApi.devices(), serverApi.enrollments()])
-        .then(([d, e]) => {
+      Promise.all([serverApi.devices(), serverApi.enrollments(), serverApi.users()])
+        .then(([d, e, u]) => {
           setDevices(d)
+          setUsers(u)
           setEnrollments(e)
         })
         .catch((e: Error) => message.error(e.message))
@@ -108,6 +110,25 @@ export default function Devices() {
                   </Typography.Text>
                 )}
               </Space>
+            ),
+          },
+          {
+            // 设备是主要对象，所属用户只作辅助：放在名称后面，淡色小号。
+            title: '用户',
+            dataIndex: 'user_id',
+            width: 160,
+            render: (v: number, d) => (
+              <Select
+                size="small"
+                variant="borderless"
+                allowClear
+                disabled={d.revoked}
+                value={v || undefined}
+                placeholder="未分配"
+                style={{ width: 140, color: 'var(--ant-color-text-secondary)' }}
+                options={users.map((u) => ({ value: u.id, label: u.name }))}
+                onChange={(uid) => void act(() => serverApi.setDeviceUser(d.id, uid ?? 0), '已更新')}
+              />
             ),
           },
           { title: '最近联系', dataIndex: 'last_seen', width: 180, render: time },

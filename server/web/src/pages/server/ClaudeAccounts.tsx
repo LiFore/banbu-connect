@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Alert, App, AutoComplete, Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Select, Space, Switch } from 'antd'
 import { GoogleOutlined } from '@ant-design/icons'
-import { serverApi, type AccountKind, type ClaudeAccount, type ClaudeAccountInput, type Device, type GmailClient, type MailServer } from '../../serverApi'
+import { serverApi, type AccountKind, type ClaudeAccount, type ClaudeAccountInput, type Device, type GmailClient, type MailServer, type User } from '../../serverApi'
+import { deviceOptions, effectiveDevices, userOptions } from './assign'
 
 // Claude、Codex 账号的弹窗（页面在 AiAccounts.tsx）。两类账号和 Gemini 一样分开添加，建好后类型不能改。
 // 登录信息四种来源（ADR-067）：客户端登录后上报（不限注册方式）；账号是 Gmail 时授权 Gmail，客户端一键登录时
@@ -144,11 +145,13 @@ export function TokenFields({ kind, required }: { kind: AccountKind; required: b
 export function ClaudeEditModal({
   account,
   devices,
+  users,
   onClose,
   onSaved,
 }: {
   account?: ClaudeAccount | AccountKind
   devices: Device[]
+  users: User[]
   onClose: () => void
   onSaved: (a: ClaudeAccount, created: boolean, source: CredSource, test: boolean) => void
 }) {
@@ -160,6 +163,7 @@ export function ClaudeEditModal({
   const source = Form.useWatch('source', form)
   const access = Form.useWatch('access_token', form)
   const chosen = Form.useWatch('devices', form) as number[] | undefined
+  const chosenUsers = Form.useWatch('users', form) as number[] | undefined
   // 弹窗按账号重新挂载（key），初始值就是这个账号的。
   const [mailboxOpen, setMailboxOpen] = useState(() => typeof account === 'object' && account.has_mailbox)
   const isNew = typeof account === 'string'
@@ -181,6 +185,7 @@ export function ClaudeEditModal({
             email: '',
             note: '',
             devices: [],
+            users: [],
             sub_expires: '',
             holder_device: 0,
             plan: '',
@@ -199,7 +204,8 @@ export function ClaudeEditModal({
             kind: account.kind,
             email: account.email,
             note: account.note,
-            devices: account.devices,
+            devices: account.direct_devices,
+            users: account.users,
             sub_expires: account.sub_expires,
             holder_device: account.holder_device,
             plan: account.plan,
@@ -343,23 +349,35 @@ export function ClaudeEditModal({
           <Input maxLength={200} placeholder="如：主力、备用" />
         </Form.Item>
         <Form.Item
+          name="users"
+          label="分配给用户"
+          extra="选中用户后，用户名下的所有设备（包括之后加入的）都能用这个账号、收到托管的令牌。"
+        >
+          <Select mode="multiple" allowClear placeholder="选择用户（可选）" optionFilterProp="label" options={userOptions(users, devices)} />
+        </Form.Item>
+        <Form.Item
           name="devices"
-          label="可用的客户端"
+          label="分配给设备"
+          dependencies={['users']}
           extra={
             isNew && source === 'client'
-              ? '至少勾选一台客户端：在它上面登录这个账号后，凭据才会上报到这里。'
-              : '只有勾选的客户端能用这个账号、收到托管的令牌；新加入的客户端默认没有任何账号。'
+              ? '至少分配给一台设备或一位用户：在它上面登录这个账号后，凭据才会上报到这里。'
+              : '直接分配的设备，加上上面用户名下的设备，才能用这个账号、收到托管的令牌；新加入的设备默认没有任何账号。'
           }
           rules={
-            isNew && source === 'client' ? [{ required: true, type: 'array', min: 1, message: '至少勾选一台客户端，在它上面登录后上报' }] : undefined
+            isNew && source === 'client'
+              ? [
+                  ({ getFieldValue }) => ({
+                    validator: (_, v: number[] = []) =>
+                      v.length > 0 || (getFieldValue('users') ?? []).length > 0
+                        ? Promise.resolve()
+                        : Promise.reject(new Error('至少分配给一台设备或一位用户，在它上面登录后上报')),
+                  }),
+                ]
+              : undefined
           }
         >
-          <Select
-            mode="multiple"
-            allowClear
-            placeholder="选择客户端（不选则没有客户端能用）"
-            options={devices.filter((d) => !d.revoked).map((d) => ({ value: d.id, label: d.name }))}
-          />
+          <Select mode="multiple" allowClear placeholder="选择设备（可选）" optionFilterProp="label" options={deviceOptions(devices, users)} />
         </Form.Item>
         {kind === 'codex' && (
           <Form.Item
@@ -370,7 +388,7 @@ export function ClaudeEditModal({
             <Select
               options={[
                 { value: 0, label: '自动（可用客户端里的第一台）' },
-                ...devices.filter((d) => !d.revoked && chosen?.includes(d.id)).map((d) => ({ value: d.id, label: d.name })),
+                ...deviceOptions(devices, users, effectiveDevices(chosen, chosenUsers, users)),
               ]}
             />
           </Form.Item>

@@ -276,7 +276,7 @@ func (s *Server) GeminiOverview(ctx context.Context) (GeminiOverview, error) {
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT d.id, d.name, COALESCE(g.active_account_id, 0), COALESCE(g.reported_at, ''), COALESCE(g.switch_to, 0)
 		FROM devices d LEFT JOIN gemini_device_state g ON g.device_id = d.id
-		WHERE d.revoked = 0 AND d.id IN (SELECT device_id FROM gemini_assignments) ORDER BY d.name`)
+		WHERE d.revoked = 0 AND d.id IN (SELECT device_id FROM gemini_effective_assignments) ORDER BY d.name`)
 	if err != nil {
 		return out, err
 	}

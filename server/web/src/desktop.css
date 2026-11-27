@@ -3535,3 +3535,66 @@ html.box-mode .server-badge {
   margin: 0;
   padding-left: 18px;
 }
+
+/* AI 账号按类型分组：标题 + 各自的卡片网格 */
+.ai-section {
+  margin-bottom: 14px;
+}
+
+.ai-section-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.ai-section-count {
+  font-size: 12px;
+  color: var(--box-text-secondary);
+}
+
+/* 卡片下方折叠的分配明细：设备为主，用户为辅 */
+.ai-assign {
+  margin-top: 6px;
+}
+
+.ai-assign .ant-collapse-header {
+  padding: 4px 0 !important;
+  font-size: 12px;
+  color: var(--box-text-secondary);
+}
+
+.ai-assign .ant-collapse-body {
+  padding: 4px 0 0 !important;
+}
+
+.ai-assign-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.ai-assign-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.ai-assign-main {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ai-assign-sub {
+  font-size: 12px;
+}
+
+.ai-assign-users {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin-top: 6px;
+}

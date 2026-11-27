@@ -370,15 +370,17 @@ type Device struct {
 	// ReportedName 是客户端最近一次上报的电脑名；NameCustom 表示名称是管理员改的，不再被上报的电脑名覆盖。
 	ReportedName string `json:"reported_name"`
 	NameCustom   bool   `json:"name_custom"`
+	// UserID 是设备所属的用户（users.id），0 表示不属于任何用户。
+	UserID int64 `json:"user_id"`
 }
 
 const selectDevice = `SELECT id, name, created_at, last_seen, last_ip, app_version, platform, os_version, profile_version, revoked, diag_at,
-	reported_name, name_custom FROM devices`
+	reported_name, name_custom, user_id FROM devices`
 
 func scanDevice(sc interface{ Scan(...any) error }) (Device, error) {
 	var d Device
 	err := sc.Scan(&d.ID, &d.Name, &d.CreatedAt, &d.LastSeen, &d.LastIP, &d.AppVersion, &d.Platform, &d.OSVersion, &d.ProfileVersion, &d.Revoked, &d.DiagAt,
-		&d.ReportedName, &d.NameCustom)
+		&d.ReportedName, &d.NameCustom, &d.UserID)
 	return d, err
 }
 

@@ -146,6 +146,22 @@ export interface Device {
   diag_at: string // 最近一次上报诊断数据
   reported_name: string // 客户端最近一次上报的电脑名
   name_custom: boolean // 名称是管理员改的，不再被上报的电脑名覆盖
+  user_id: number // 所属用户（User.id），0 表示不属于任何用户
+}
+
+// 用户：有姓名，名下可以有多台设备；账号可以分配给用户（名下所有设备都能用），与 internal/dist/users.go 对应。
+export interface User {
+  id: number
+  name: string
+  note: string
+  devices: number[] // 名下的设备（不含已吊销）
+  created_at: string
+}
+
+export interface UserInput {
+  name: string
+  note: string
+  devices?: number[] // 不传表示不改名下的设备
 }
 
 // 客户端接入状态，与 internal/dist/access.go 对应。
@@ -414,7 +430,9 @@ export interface ClaudeAccount {
   kind: AccountKind
   email: string
   note: string
-  devices: number[] // 允许的客户端；空表示没有客户端能用（ADR-060）
+  devices: number[] // 生效的客户端：直接分配的加上分配的用户名下的；空表示没有客户端能用（ADR-060）
+  direct_devices: number[] // 直接分配的客户端
+  users: number[] // 分配给的用户
   gmail_authorized: boolean
   // 自建邮箱（IMAP，如 BillionMail）：登录名为空表示用账号邮箱；密码只返回有没有。填了密码时优先于 Gmail。
   mail_user: string
@@ -487,7 +505,8 @@ export interface ClaudeAccountInput {
   kind: AccountKind
   email: string
   note: string
-  devices: number[]
+  devices: number[] // 直接分配的客户端
+  users?: number[] // 分配给的用户
   sub_expires: string
   holder_device?: number // 只对 Codex 有效，0 表示自动
   plan?: string
@@ -687,7 +706,9 @@ export interface GeminiAccount {
   email: string
   note: string
   max_devices: number
-  devices: number[] // 分配到的客户端
+  devices: number[] // 生效的客户端：直接分配的加上分配的用户名下的
+  direct_devices: number[] // 直接分配的客户端
+  users: number[] // 分配给的用户
   has_credential: boolean
   cred_version: number
   cred_updated_at: string
@@ -738,7 +759,8 @@ export interface GeminiAccountInput {
   email: string
   note: string
   max_devices: number
-  devices: number[]
+  devices: number[] // 直接分配的客户端（受设备上限限制）
+  users?: number[] // 分配给的用户：名下的设备都能用，不占设备上限
   sub_expires: string
   plan?: string
   access_token?: string
@@ -836,6 +858,12 @@ export const serverApi = {
   settings: () => request<DistSettings>('/dist/settings'),
   updateSettings: (s: Partial<DistSettings>) => request<{ ok: boolean }>('/dist/settings', { method: 'PUT', body: JSON.stringify(s) }),
   devices: () => request<Device[]>('/dist/devices'),
+  users: () => request<User[]>('/dist/users'),
+  createUser: (u: UserInput) => request<User>('/dist/users', { method: 'POST', body: JSON.stringify(u) }),
+  updateUser: (id: number, u: UserInput) => request<User>(`/dist/users/${id}`, { method: 'PUT', body: JSON.stringify(u) }),
+  deleteUser: (id: number) => request<{ ok: boolean }>(`/dist/users/${id}`, { method: 'DELETE' }),
+  setDeviceUser: (id: number, userId: number) =>
+    request<Device>(`/dist/devices/${id}/user`, { method: 'PUT', body: JSON.stringify({ user_id: userId }) }),
   deviceAccess: () => request<DeviceAccess[]>('/dist/access'),
   deviceAccessHistory: (id: number, days = 7) => request<AccessSession[]>(`/dist/devices/${id}/access?days=${days}`),
   createDevice: () => request<{ device: Device; token: string }>('/dist/devices', { method: 'POST' }),

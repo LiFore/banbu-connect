@@ -34,7 +34,9 @@ type GeminiAccount struct {
 	Email         string    `json:"email"`
 	Note          string    `json:"note"`
 	MaxDevices    int       `json:"max_devices"`
-	Devices       []int64   `json:"devices"` // 分配到的客户端
+	Devices       []int64   `json:"devices"`        // 生效的客户端：直接分配的加上分配的用户名下的
+	DirectDevices []int64   `json:"direct_devices"` // 直接分配的客户端
+	Users         []int64   `json:"users"`          // 分配给的用户
 	HasCredential bool      `json:"has_credential"`
 	CredVersion   int64     `json:"cred_version"`
 	CredUpdatedAt string    `json:"cred_updated_at"`
@@ -52,7 +54,8 @@ type GeminiAccountInput struct {
 	Email        string  `json:"email"`
 	Note         string  `json:"note"`
 	MaxDevices   int     `json:"max_devices"`
-	Devices      []int64 `json:"devices"`
+	Devices      []int64 `json:"devices"` // 直接分配的客户端（受设备上限限制）
+	Users        []int64 `json:"users"`   // 分配给的用户：用户名下的设备都能用，不占设备上限
 	SubExpires   string  `json:"sub_expires"`
 	Plan         string  `json:"plan"`
 	AccessToken  string  `json:"access_token,omitempty"`
@@ -66,13 +69,18 @@ func scanGemini(sc interface{ Scan(...any) error }) (GeminiAccount, error) {
 	var a GeminiAccount
 	err := sc.Scan(&a.ID, &a.Email, &a.Note, &a.MaxDevices, &a.HasCredential, &a.CredVersion, &a.CredUpdatedAt, &a.CredSource,
 		&a.SubExpires, &a.Plan, &a.CreatedAt, &a.UpdatedAt)
-	a.Devices = []int64{}
+	a.Devices, a.DirectDevices, a.Users = []int64{}, []int64{}, []int64{}
 	return a, err
 }
 
 // geminiAssignments 返回每个账号分配到的客户端（不含已吊销的）。
 func (s *Server) geminiAssignments(ctx context.Context) (map[int64][]int64, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT a.account_id, a.device_id FROM gemini_assignments a
+	return s.geminiAssignmentsFrom(ctx, "gemini_effective_assignments")
+}
+
+// geminiAssignmentsFrom 读分配：gemini_effective_assignments（含用户名下的设备）或 gemini_assignments（只有直接分配的）。
+func (s *Server) geminiAssignmentsFrom(ctx context.Context, table string) (map[int64][]int64, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT a.account_id, a.device_id FROM `+table+` a
 		JOIN devices d ON d.id = a.device_id WHERE d.revoked = 0 ORDER BY a.account_id, a.device_id`)
 	if err != nil {
 		return nil, err
@@ -110,9 +118,23 @@ func (s *Server) GeminiAccounts(ctx context.Context) ([]GeminiAccount, error) {
 	if err != nil {
 		return nil, err
 	}
+	direct, err := s.geminiAssignmentsFrom(ctx, "gemini_assignments")
+	if err != nil {
+		return nil, err
+	}
+	users, err := s.accountUsers(ctx, scopeGemini)
+	if err != nil {
+		return nil, err
+	}
 	for i := range out {
 		if d := assigned[out[i].ID]; d != nil {
 			out[i].Devices = d
+		}
+		if d := direct[out[i].ID]; d != nil {
+			out[i].DirectDevices = d
+		}
+		if u := users[out[i].ID]; u != nil {
+			out[i].Users = u
 		}
 		out[i].AuthTest = s.authTest("gemini", out[i].ID)
 	}
@@ -128,10 +150,27 @@ func (s *Server) geminiAccount(ctx context.Context, id int64) (GeminiAccount, er
 		return a, err
 	}
 	assigned, err := s.geminiAssignments(ctx)
+	if err != nil {
+		return a, err
+	}
 	if d := assigned[id]; d != nil {
 		a.Devices = d
 	}
-	return a, err
+	direct, err := s.geminiAssignmentsFrom(ctx, "gemini_assignments")
+	if err != nil {
+		return a, err
+	}
+	if d := direct[id]; d != nil {
+		a.DirectDevices = d
+	}
+	users, err := s.accountUsers(ctx, scopeGemini)
+	if err != nil {
+		return a, err
+	}
+	if u := users[id]; u != nil {
+		a.Users = u
+	}
+	return a, nil
 }
 
 func (in *GeminiAccountInput) normalize() error {
@@ -166,6 +205,7 @@ func (in *GeminiAccountInput) normalize() error {
 		}
 	}
 	in.Devices = devices
+	in.Users = normalizeIDs(in.Users)
 	if len(in.Devices) > in.MaxDevices {
 		return &InputError{fmt.Sprintf("分配了 %d 台客户端，超过设备上限 %d", len(in.Devices), in.MaxDevices)}
 	}
@@ -252,6 +292,10 @@ func (s *Server) CreateGeminiAccount(ctx context.Context, in GeminiAccountInput)
 	if err := tx.Commit(); err != nil {
 		return GeminiAccount{}, err
 	}
+	if err := s.setAccountUsers(ctx, scopeGemini, id, in.Users); err != nil {
+		_ = s.DeleteGeminiAccount(ctx, id)
+		return GeminiAccount{}, err
+	}
 	s.geminiChanged()
 	return s.geminiAccount(ctx, id)
 }
@@ -286,6 +330,9 @@ func (s *Server) UpdateGeminiAccount(ctx context.Context, id int64, in GeminiAcc
 	if err := tx.Commit(); err != nil {
 		return GeminiAccount{}, err
 	}
+	if err := s.setAccountUsers(ctx, scopeGemini, id, in.Users); err != nil {
+		return GeminiAccount{}, err
+	}
 	s.geminiChanged()
 	return s.geminiAccount(ctx, id)
 }
@@ -301,6 +348,7 @@ func (s *Server) DeleteGeminiAccount(ctx context.Context, id int64) error {
 	if err := s.execOne(ctx, `DELETE FROM gemini_accounts WHERE id = ?`, id); err != nil {
 		return err
 	}
+	s.clearAccountUsers(ctx, scopeGemini, id)
 	s.geminiChanged()
 	return nil
 }
@@ -456,7 +504,7 @@ func (s *Server) geminiCredential(ctx context.Context, id int64) ([]byte, int64,
 
 func (s *Server) assigned(ctx context.Context, accountID, deviceID int64) (bool, error) {
 	var n int
-	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM gemini_assignments WHERE account_id = ? AND device_id = ?`,
+	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM gemini_effective_assignments WHERE account_id = ? AND device_id = ?`,
 		accountID, deviceID).Scan(&n)
 	return n > 0, err
 }

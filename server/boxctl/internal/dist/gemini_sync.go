@@ -48,7 +48,7 @@ type GeminiSync struct {
 func (s *Server) GeminiSync(ctx context.Context, deviceID int64) (GeminiSync, error) {
 	out := GeminiSync{Accounts: []GeminiSyncAccount{}, Order: []int64{}}
 	rows, err := s.DB.QueryContext(ctx, `SELECT g.id, g.email, g.note, g.cred_version FROM gemini_accounts g
-		JOIN gemini_assignments a ON a.account_id = g.id WHERE a.device_id = ? ORDER BY g.email`, deviceID)
+		JOIN gemini_effective_assignments a ON a.account_id = g.id WHERE a.device_id = ? ORDER BY g.email`, deviceID)
 	if err != nil {
 		return out, err
 	}

@@ -15,6 +15,7 @@ import {
   LinkOutlined,
   LogoutOutlined,
   ProfileOutlined,
+  TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import type { SessionInfo } from '../../api'
@@ -28,6 +29,7 @@ import Publish from './Publish'
 import Routing from './Routing'
 import Profiles from './Profiles'
 import Devices from './Devices'
+import Users from './Users'
 import Releases from './Releases'
 import AiAccounts from './AiAccounts'
 import Files from './Files'
@@ -45,6 +47,7 @@ const pages = [
   { path: '/profiles', label: '方案', icon: <ProfileOutlined />, element: <Profiles /> },
   { path: '/publish', label: '发布', icon: <CloudUploadOutlined />, element: <Publish /> },
   { path: '/devices', label: '客户端', icon: <LaptopOutlined />, element: <Devices /> },
+  { path: '/users', label: '用户', icon: <TeamOutlined />, element: <Users /> },
   {
     path: '/telemetry',
     label: '遥测',

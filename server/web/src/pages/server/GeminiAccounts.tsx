@@ -9,7 +9,9 @@ import {
   type GeminiDeviceView,
   type GeminiOAuthInfo,
   type GeminiOverview,
+  type User,
 } from '../../serverApi'
+import { deviceOptions, userOptions } from './assign'
 import { ExpiryField, PlanField } from './ClaudeAccounts'
 
 // Gemini（Antigravity）账号的弹窗和调度卡片（页面在 AiAccounts.tsx，ADR-046）：管理服务托管每个账号的凭据（加密），
@@ -23,11 +25,13 @@ const isJSON = (s?: string) => !!s?.trim().startsWith('{')
 export function GeminiEditModal({
   account,
   devices,
+  users,
   onClose,
   onSaved,
 }: {
   account?: GeminiAccount | 'new'
   devices: Device[]
+  users: User[]
   onClose: () => void
   onSaved: () => void
 }) {
@@ -41,8 +45,8 @@ export function GeminiEditModal({
     if (!account) return
     form.setFieldsValue(
       account === 'new'
-        ? { email: '', note: '', max_devices: 2, devices: [], sub_expires: '', plan: '', refresh_token: '' }
-        : { email: account.email, note: account.note, max_devices: account.max_devices, devices: account.devices, sub_expires: account.sub_expires, plan: account.plan },
+        ? { email: '', note: '', max_devices: 2, devices: [], users: [], sub_expires: '', plan: '', refresh_token: '' }
+        : { email: account.email, note: account.note, max_devices: account.max_devices, devices: account.direct_devices, users: account.users, sub_expires: account.sub_expires, plan: account.plan },
     )
   }, [account, form])
 
@@ -100,8 +104,15 @@ export function GeminiEditModal({
           <InputNumber min={1} max={20} />
         </Form.Item>
         <Form.Item
+          name="users"
+          label="分配给用户"
+          extra="选中用户后，用户名下的所有设备（包括之后加入的）都能用这个账号，不占设备上限。"
+        >
+          <Select mode="multiple" allowClear placeholder="选择用户（可选）" optionFilterProp="label" options={userOptions(users, devices)} />
+        </Form.Item>
+        <Form.Item
           name="devices"
-          label="分配到的客户端"
+          label="分配给设备（受设备上限限制）"
           dependencies={['max_devices']}
           rules={[
             ({ getFieldValue }) => ({
@@ -113,8 +124,9 @@ export function GeminiEditModal({
           <Select
             mode="multiple"
             allowClear
-            placeholder="选择客户端"
-            options={devices.filter((d) => !d.revoked).map((d) => ({ value: d.id, label: d.name }))}
+            placeholder="选择设备"
+            optionFilterProp="label"
+            options={deviceOptions(devices, users)}
           />
         </Form.Item>
       </Form>

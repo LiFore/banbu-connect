@@ -55,11 +55,15 @@ const (
 
 // ClaudeAccount 是登记的账号（Claude 或 Codex）；Gmail 授权只返回有没有。
 type ClaudeAccount struct {
-	ID              int64   `json:"id"`
-	Kind            string  `json:"kind"`
-	Email           string  `json:"email"`
-	Note            string  `json:"note"`
-	Devices         []int64 `json:"devices"` // 允许使用的客户端；空表示没有客户端能用（ADR-060）
+	ID    int64  `json:"id"`
+	Kind  string `json:"kind"`
+	Email string `json:"email"`
+	Note  string `json:"note"`
+	// Devices 是生效的客户端：直接分配的设备加上分配给的用户名下的设备；空表示没有客户端能用（ADR-060）。
+	// DirectDevices 是直接分配的设备，Users 是分配给的用户，管理页面分别编辑。
+	Devices         []int64 `json:"devices"`
+	DirectDevices   []int64 `json:"direct_devices"`
+	Users           []int64 `json:"users"`
 	GmailAuthorized bool    `json:"gmail_authorized"`
 	// 自建邮箱（IMAP，如 BillionMail）：登录名（空表示用账号邮箱）和有没有密码；填了密码时优先于 Gmail。
 	MailUser   string `json:"mail_user"`
@@ -103,7 +107,8 @@ type ClaudeAccountInput struct {
 	Kind         string  `json:"kind"`
 	Email        string  `json:"email"`
 	Note         string  `json:"note"`
-	Devices      []int64 `json:"devices"`
+	Devices      []int64 `json:"devices"` // 直接分配的设备
+	Users        []int64 `json:"users"`   // 分配给的用户：用户名下的设备都能用
 	SubExpires   string  `json:"sub_expires"`
 	HolderDevice int64   `json:"holder_device"` // 只对 Codex 有效，0 表示自动
 	Plan         string  `json:"plan"`
@@ -149,6 +154,8 @@ func scanClaude(sc interface{ Scan(...any) error }) (ClaudeAccount, error) {
 	if a.Devices == nil {
 		a.Devices = []int64{}
 	}
+	a.DirectDevices = a.Devices
+	a.Users = []int64{}
 	a.Holder = holderOf(a)
 	switch {
 	case a.HasMailbox:
@@ -175,7 +182,35 @@ func (s *Server) ClaudeAccounts(ctx context.Context) ([]ClaudeAccount, error) {
 		a.Refresh = s.refreshState(a.ID)
 		out = append(out, a)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if err := s.resolveClaudeUsers(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// resolveClaudeUsers 填上账号分配的用户，并把用户名下的设备合进生效的设备（Devices），之后各处的权限判断不用再关心用户。
+func (s *Server) resolveClaudeUsers(ctx context.Context, list []ClaudeAccount) error {
+	users, err := s.accountUsers(ctx, scopeClaude)
+	if err != nil {
+		return err
+	}
+	byUser, err := s.userDevices(ctx)
+	if err != nil {
+		return err
+	}
+	for i := range list {
+		a := &list[i]
+		if u := users[a.ID]; u != nil {
+			a.Users = u
+		}
+		a.Devices = mergeDevices(a.DirectDevices, a.Users, byUser)
+		a.Holder = holderOf(*a)
+	}
+	return nil
 }
 
 func (s *Server) claudeAccount(ctx context.Context, id int64) (ClaudeAccount, error) {
@@ -185,6 +220,10 @@ func (s *Server) claudeAccount(ctx context.Context, id int64) (ClaudeAccount, er
 	}
 	if err == nil {
 		a.Refresh = s.refreshState(id)
+		one := []ClaudeAccount{a}
+		if err = s.resolveClaudeUsers(ctx, one); err == nil {
+			a = one[0]
+		}
 	}
 	return a, err
 }
@@ -215,8 +254,24 @@ func (in *ClaudeAccountInput) normalize() error {
 		return err
 	}
 	in.MailUser = strings.TrimSpace(in.MailUser)
-	if in.Kind != KindCodex || !slices.Contains(in.Devices, in.HolderDevice) {
-		in.HolderDevice = 0 // 持有者只对 Codex 有效，且必须是分配到的客户端
+	in.Users = normalizeIDs(in.Users)
+	if in.Kind != KindCodex {
+		in.HolderDevice = 0 // 持有者只对 Codex 有效
+	}
+	return nil
+}
+
+// fixHolder 持有者必须是生效的客户端（直接分配的，或在分配的用户名下），否则改为自动。
+func (s *Server) fixHolder(ctx context.Context, in *ClaudeAccountInput) error {
+	if in.HolderDevice == 0 {
+		return nil
+	}
+	byUser, err := s.userDevices(ctx)
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(mergeDevices(in.Devices, in.Users, byUser), in.HolderDevice) {
+		in.HolderDevice = 0
 	}
 	return nil
 }
@@ -254,6 +309,9 @@ func (s *Server) CreateClaudeAccount(ctx context.Context, in ClaudeAccountInput)
 	if err := in.normalize(); err != nil {
 		return ClaudeAccount{}, err
 	}
+	if err := s.fixHolder(ctx, &in); err != nil {
+		return ClaudeAccount{}, err
+	}
 	devices, _ := json.Marshal(in.Devices)
 	res, err := s.DB.ExecContext(ctx, `INSERT INTO claude_accounts (kind, email, note, devices, sub_expires, holder_device,
 		plan, account_type, team_role, team_name, team_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -263,6 +321,10 @@ func (s *Server) CreateClaudeAccount(ctx context.Context, in ClaudeAccountInput)
 		return ClaudeAccount{}, uniqueErr(err)
 	}
 	id, _ := res.LastInsertId()
+	if err := s.setAccountUsers(ctx, scopeClaude, id, in.Users); err != nil {
+		_, _ = s.DB.ExecContext(ctx, `DELETE FROM claude_accounts WHERE id = ?`, id)
+		return ClaudeAccount{}, err
+	}
 	if in.MailPassword != "" {
 		if err := s.setMailbox(ctx, id, in.MailUser, in.MailPassword); err != nil {
 			_, _ = s.DB.ExecContext(ctx, `DELETE FROM claude_accounts WHERE id = ?`, id)
@@ -293,6 +355,12 @@ func (s *Server) UpdateClaudeAccount(ctx context.Context, id int64, in ClaudeAcc
 		return ClaudeAccount{}, &InputError{"账号类型不能修改：删除后按新类型重新添加"}
 	}
 	if err := in.normalize(); err != nil {
+		return ClaudeAccount{}, err
+	}
+	if err := s.fixHolder(ctx, &in); err != nil {
+		return ClaudeAccount{}, err
+	}
+	if err := s.setAccountUsers(ctx, scopeClaude, id, in.Users); err != nil {
 		return ClaudeAccount{}, err
 	}
 	devices, _ := json.Marshal(in.Devices)
@@ -333,6 +401,7 @@ func (s *Server) DeleteClaudeAccount(ctx context.Context, id int64) error {
 		return ErrNotFound
 	}
 	s.forgetGmailToken(id)
+	s.clearAccountUsers(ctx, scopeClaude, id)
 	s.geminiChanged()
 	return nil
 }

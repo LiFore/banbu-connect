@@ -183,6 +183,7 @@ func (s *Server) AdminRoutes(mux *http.ServeMux, authed func(http.HandlerFunc) h
 	idAction("DELETE /api/v1/dist/devices/{id}", func(r *http.Request, id int64) error { return s.DeleteDevice(r.Context(), id) })
 	s.claudeAdminRoutes(mux, authed, log)
 	s.geminiAdminRoutes(mux, authed, log)
+	s.userAdminRoutes(mux, authed, log)
 	s.telemetryAdminRoutes(mux, authed, log)
 	s.updatePolicyAdminRoutes(mux, authed, log)
 	s.diagnosticsAdminRoutes(mux, authed, log)

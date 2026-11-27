@@ -31,6 +31,7 @@ import {
   type AIRefreshState,
   type ClaudeAccount,
   type Device,
+  type User,
   type GeminiAccount,
   type GeminiOAuthInfo,
   type GeminiOverview,
@@ -38,6 +39,7 @@ import {
   type GmailClient,
   type MailServer,
 } from '../../serverApi'
+import { AssignedList } from './assign'
 import { PageHeader } from '../common'
 import { AuthorizeModal, ClaudeEditModal, ClientModal, emailDomain, isGmail, MailServerModal } from './ClaudeAccounts'
 import { GeminiDevicesCard, GeminiEditModal, OAuthModal } from './GeminiAccounts'
@@ -264,6 +266,7 @@ export default function AiAccounts() {
   const [claude, setClaude] = useState<ClaudeAccount[]>([])
   const [gemini, setGemini] = useState<GeminiAccount[]>([])
   const [devices, setDevices] = useState<Device[]>([])
+  const [users, setUsers] = useState<User[]>([])
   const [gmail, setGmail] = useState<GmailClient>()
   const [mailServer, setMailServer] = useState<MailServer>()
   const [oauth, setOAuth] = useState<GeminiOAuthInfo>()
@@ -295,15 +298,17 @@ export default function AiAccounts() {
         serverApi.claudeAccounts(),
         serverApi.geminiAccounts(),
         serverApi.devices(),
+        serverApi.users(),
         serverApi.gmailClient(),
         serverApi.geminiOAuth(),
         serverApi.geminiOverview(),
         serverApi.mailServer(),
       ])
-        .then(([c, g, d, gc, o, v, ms]) => {
+        .then(([c, g, d, us, gc, o, v, ms]) => {
           setClaude(c)
           setGemini(g)
           setDevices(d)
+          setUsers(us)
           setGmail(gc)
           setOAuth(o)
           setOverview(v)
@@ -507,28 +512,45 @@ export default function AiAccounts() {
           </Empty>
         </Card>
       ) : (
-        <div className="ai-grid">
-          {shown.map((it) => (
-            <AccountCard
-              key={`${it.kind === 'gemini' ? 'g' : 'c'}${it.a.id}`}
-              item={it}
-              usage={it.kind === 'gemini' ? overview?.usage.find((u) => u.account_id === it.a.id) : undefined}
-              online={online.find((o) => o.kind === it.kind && o.account_id === it.a.id)}
-              deviceName={deviceName}
-              gmailReady={gmailReady}
-              onTest={() => startTest(it)}
-              onCredential={() => setCredFor(it)}
-              onEdit={() => (it.kind === 'gemini' ? setEditGemini(it.a) : setEditClaude(it.a))}
-              onAuthorize={() => it.kind !== 'gemini' && setAuthorizing(it.a)}
-              onRefresh={() => it.kind !== 'gemini' && refreshNow(it.a)}
-              onTestMail={() => it.kind !== 'gemini' && testMail(it.a)}
-              onClearMailbox={() => it.kind !== 'gemini' && clearMailbox(it.a)}
-              onClear={() => clearCred(it)}
-              onDelete={() => remove(it)}
-              onTeam={(team) => changeFilters({ ...filters, team })}
-            />
-          ))}
-        </div>
+        // 不同种类的账号分开显示：Claude、Codex、Gemini 各一组，各有标题和自己的卡片网格。
+        (['claude', 'codex', 'gemini'] as Kind[]).map((kind) => {
+          const group = shown.filter((it) => it.kind === kind)
+          if (group.length === 0) return null
+          return (
+            <section key={kind} className="ai-section">
+              <div className="ai-section-head">
+                <Tag color={kindTag[kind].color} className="ai-kind">
+                  {kindTag[kind].label}
+                </Tag>
+                <span className="ai-section-count">{group.length} 个账号</span>
+              </div>
+              <div className="ai-grid">
+                {group.map((it) => (
+                  <AccountCard
+                    key={`${it.kind === 'gemini' ? 'g' : 'c'}${it.a.id}`}
+                    item={it}
+                    usage={it.kind === 'gemini' ? overview?.usage.find((u) => u.account_id === it.a.id) : undefined}
+                    online={online.find((o) => o.kind === it.kind && o.account_id === it.a.id)}
+                    devices={devices}
+                    users={users}
+                    deviceName={deviceName}
+                    gmailReady={gmailReady}
+                    onTest={() => startTest(it)}
+                    onCredential={() => setCredFor(it)}
+                    onEdit={() => (it.kind === 'gemini' ? setEditGemini(it.a) : setEditClaude(it.a))}
+                    onAuthorize={() => it.kind !== 'gemini' && setAuthorizing(it.a)}
+                    onRefresh={() => it.kind !== 'gemini' && refreshNow(it.a)}
+                    onTestMail={() => it.kind !== 'gemini' && testMail(it.a)}
+                    onClearMailbox={() => it.kind !== 'gemini' && clearMailbox(it.a)}
+                    onClear={() => clearCred(it)}
+                    onDelete={() => remove(it)}
+                    onTeam={(team) => changeFilters({ ...filters, team })}
+                  />
+                ))}
+              </div>
+            </section>
+          )
+        })
       )}
 
       {overview && overview.devices.length > 0 && (filters.kind === 'all' || filters.kind === 'gemini') && (
@@ -540,6 +562,7 @@ export default function AiAccounts() {
         key={typeof editClaude === 'object' ? editClaude.id : (editClaude ?? 'none')}
         account={editClaude}
         devices={devices}
+        users={users}
         onClose={() => setEditClaude(undefined)}
         onSaved={(a, created, source, test) => {
           setEditClaude(undefined)
@@ -575,6 +598,7 @@ export default function AiAccounts() {
       <GeminiEditModal
         account={editGemini}
         devices={devices}
+        users={users}
         onClose={() => setEditGemini(undefined)}
         onSaved={() => {
           setEditGemini(undefined)
@@ -642,6 +666,8 @@ function AccountCard({
   item,
   usage,
   online,
+  devices,
+  users,
   deviceName,
   gmailReady,
   onTest,
@@ -658,6 +684,8 @@ function AccountCard({
   item: Item
   usage?: GeminiUsage
   online?: AIOnlineSummary
+  devices: Device[]
+  users: User[]
   deviceName: (id: number) => string
   gmailReady: boolean
   onTest: () => void
@@ -779,6 +807,7 @@ function AccountCard({
         ) : (
           <>
             {a.devices.map(deviceName).join('、')}
+            {a.users.length > 0 && <div>分配给用户：{a.users.map((id) => users.find((u) => u.id === id)?.name ?? `#${id}`).join('、')}</div>}
             {ai?.kind === 'codex' && ai.holder > 0 && (
               <div>
                 Refresh Token 持有者：{deviceName(ai.holder)}
@@ -887,6 +916,15 @@ function AccountCard({
         {deviceChip}
         {onlineChip}
       </div>
+
+      <AssignedList
+        devices={devices}
+        users={users}
+        effective={a.devices}
+        direct={a.direct_devices}
+        userIds={a.users}
+        holder={ai?.kind === 'codex' ? ai.holder : undefined}
+      />
 
       {issues.length > 0 && (
         <Tooltip title={issues.map((m) => <div key={m}>{m}</div>)}>
